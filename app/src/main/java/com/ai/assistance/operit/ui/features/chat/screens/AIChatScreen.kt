@@ -868,7 +868,6 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
                                         },
                                         onQueueMessage = { enqueueDraftToPendingQueue() },
                                         onCancelMessage = {
-                                            pendingQueueMessages.clear()
                                             actualViewModel.cancelCurrentMessage()
                                         },
                                         isLoading = isLoading,
@@ -1008,7 +1007,6 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
                                         },
                                         onQueueMessage = { enqueueDraftToPendingQueue() },
                                         onCancelMessage = {
-                                            pendingQueueMessages.clear()
                                             actualViewModel.cancelCurrentMessage()
                                         },
                                         isLoading = isLoading,
