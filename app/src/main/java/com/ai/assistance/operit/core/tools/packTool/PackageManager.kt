@@ -32,6 +32,8 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CompletableFuture
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -1117,13 +1119,77 @@ private constructor(private val context: Context, private val aiToolHandler: AIT
         runtime: ToolPkgContainerRuntime,
         normalizedResourcePath: String
     ): ByteArray? {
-        val normalizedPath = ToolPkgArchiveParser.normalizeZipEntryPath(normalizedResourcePath) ?: return null
-        val cacheDir = ensureToolPkgCache(runtime) ?: return null
-        val resourceFile = File(cacheDir, normalizedPath)
-        if (!resourceFile.exists() || !resourceFile.isFile) {
+        val resourceFile = resolveToolPkgResourceFile(runtime, normalizedResourcePath)
+        if (resourceFile == null || !resourceFile.isFile) {
             return null
         }
         return resourceFile.readBytes()
+    }
+
+    internal fun exportToolPkgResource(
+        runtime: ToolPkgContainerRuntime,
+        resource: ToolPkgResourceRuntime,
+        destinationFile: File
+    ): Boolean {
+        val resourceFile = resolveToolPkgResourceFile(runtime, resource.path) ?: return false
+        val parent = destinationFile.parentFile
+        if (parent != null && !parent.exists()) {
+            parent.mkdirs()
+        }
+
+        return if (ToolPkgArchiveParser.isDirectoryResourceMime(resource.mime)) {
+            if (!resourceFile.isDirectory) {
+                false
+            } else {
+                zipToolPkgResourceDirectory(resourceFile, destinationFile)
+            }
+        } else {
+            if (!resourceFile.isFile) {
+                false
+            } else {
+                resourceFile.inputStream().use { input ->
+                    destinationFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                true
+            }
+        }
+    }
+
+    internal fun resolveToolPkgResourceFile(
+        runtime: ToolPkgContainerRuntime,
+        normalizedResourcePath: String
+    ): File? {
+        val normalizedPath = ToolPkgArchiveParser.normalizeResourcePath(normalizedResourcePath) ?: return null
+        val cacheDir = ensureToolPkgCache(runtime) ?: return null
+        val resourceFile = File(cacheDir, normalizedPath)
+        if (!resourceFile.exists()) {
+            return null
+        }
+        return resourceFile
+    }
+
+    private fun zipToolPkgResourceDirectory(sourceDirectory: File, destinationZip: File): Boolean {
+        val zipRootParent = sourceDirectory.parentFile ?: return false
+        destinationZip.outputStream().buffered().use { fileOutput ->
+            ZipOutputStream(fileOutput).use { zipOutput ->
+                sourceDirectory
+                    .walkTopDown()
+                    .filter { it.isFile }
+                    .sortedBy { it.relativeTo(zipRootParent).invariantSeparatorsPath }
+                    .forEach { file ->
+                        val entryName = file.relativeTo(zipRootParent).invariantSeparatorsPath
+                        val entry = ZipEntry(entryName)
+                        zipOutput.putNextEntry(entry)
+                        file.inputStream().use { input ->
+                            input.copyTo(zipOutput)
+                        }
+                        zipOutput.closeEntry()
+                    }
+            }
+        }
+        return true
     }
 
     /**

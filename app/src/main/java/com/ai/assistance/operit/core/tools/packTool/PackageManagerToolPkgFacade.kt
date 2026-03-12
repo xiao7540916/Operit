@@ -512,15 +512,7 @@ internal class PackageManagerToolPkgFacade(
             } ?: return false
 
         return try {
-            val bytes = packageManager.readToolPkgResourceBytes(runtime, resource.path) ?: return false
-            val parent = destinationFile.parentFile
-            if (parent != null && !parent.exists()) {
-                parent.mkdirs()
-            }
-            destinationFile.outputStream().use { output ->
-                output.write(bytes)
-            }
-            true
+            packageManager.exportToolPkgResource(runtime, resource, destinationFile)
         } catch (e: Exception) {
             AppLogger.e("PackageManager", "Failed to export toolpkg resource: ${runtime.packageName}:${resource.key}", e)
             false
@@ -546,9 +538,16 @@ internal class PackageManagerToolPkgFacade(
                 runtime.resources.firstOrNull {
                     it.key.equals(key, ignoreCase = true)
                 } ?: return null
-            val fileName =
+            val baseName =
                 resource.path.substringAfterLast('/').substringAfterLast('\\').trim()
-            return fileName.ifBlank { null }
+            if (baseName.isBlank()) {
+                return null
+            }
+            return if (ToolPkgArchiveParser.isDirectoryResourceMime(resource.mime)) {
+                if (baseName.endsWith(".zip", ignoreCase = true)) baseName else "$baseName.zip"
+            } else {
+                baseName
+            }
         }
 
         resolveFromContainer(target)?.let { return it }
