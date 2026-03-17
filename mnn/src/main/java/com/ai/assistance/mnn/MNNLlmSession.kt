@@ -2,6 +2,7 @@ package com.ai.assistance.mnn
 
 import android.util.Log
 import java.io.File
+import org.json.JSONObject
 
 /**
  * MNN LLM 会话封装
@@ -150,6 +151,32 @@ class MNNLlmSession private constructor(
             MNNLlmNative.nativeCountTokensWithHistory(ptr, history)
         }
     }
+
+    fun countTokensStructured(messagesJson: String, toolsJson: String? = null): Int {
+        return withActiveCall { ptr ->
+            MNNLlmNative.nativeCountTokensWithStructuredMessages(ptr, messagesJson, toolsJson)
+        }
+    }
+
+    /**
+     * 导出当前生效的配置。
+     */
+    fun dumpConfig(): String {
+        return withActiveCall { ptr ->
+            MNNLlmNative.nativeDumpConfig(ptr)
+                ?: throw RuntimeException("Dump config failed")
+        }
+    }
+
+    /**
+     * 获取最近一次推理的上下文统计。
+     * 在尚未执行推理时可能返回 null。
+     */
+    fun getContextInfo(): MNNLlmContextInfo? {
+        return withActiveCall { ptr ->
+            MNNLlmNative.nativeGetContextInfo(ptr)?.let(MNNLlmContextInfo::fromJson)
+        }
+    }
     
     /**
      * 应用聊天模板
@@ -158,6 +185,23 @@ class MNNLlmSession private constructor(
         return withActiveCall { ptr ->
             MNNLlmNative.nativeApplyChatTemplate(ptr, userContent)
                 ?: userContent
+        }
+    }
+
+    /**
+     * 对完整历史应用聊天模板。
+     */
+    fun applyChatTemplate(history: List<Pair<String, String>>): String {
+        return withActiveCall { ptr ->
+            MNNLlmNative.nativeApplyChatTemplateWithHistory(ptr, history)
+                ?: throw RuntimeException("Apply chat template with history failed")
+        }
+    }
+
+    fun applyChatTemplateStructured(messagesJson: String, toolsJson: String? = null): String {
+        return withActiveCall { ptr ->
+            MNNLlmNative.nativeApplyChatTemplateWithStructuredMessages(ptr, messagesJson, toolsJson)
+                ?: throw RuntimeException("Apply chat template with structured messages failed")
         }
     }
     
@@ -199,6 +243,28 @@ class MNNLlmSession private constructor(
 
         return withActiveCall { ptr ->
             MNNLlmNative.nativeGenerateStream(ptr, history, maxTokens, callback)
+        }
+    }
+
+    fun generateStreamStructured(
+        messagesJson: String,
+        toolsJson: String? = null,
+        maxTokens: Int = -1,
+        onToken: (String) -> Boolean
+    ): Boolean {
+        val callback = object : MNNLlmNative.GenerationCallback {
+            override fun onToken(token: String): Boolean {
+                return try {
+                    onToken(token)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in structured token callback", e)
+                    false
+                }
+            }
+        }
+
+        return withActiveCall { ptr ->
+            MNNLlmNative.nativeGenerateStreamStructured(ptr, messagesJson, toolsJson, maxTokens, callback)
         }
     }
     
@@ -260,6 +326,27 @@ class MNNLlmSession private constructor(
             success
         }
     }
+
+    /**
+     * 更新 max_new_tokens 配置。
+     */
+    fun setMaxNewTokens(maxNewTokens: Int): Boolean {
+        return setConfig("""{"max_new_tokens":$maxNewTokens}""")
+    }
+
+    /**
+     * 更新 system_prompt 配置。
+     */
+    fun setSystemPrompt(systemPrompt: String): Boolean {
+        return setConfig("""{"system_prompt":${JSONObject.quote(systemPrompt)}}""")
+    }
+
+    /**
+     * 更新 assistant_prompt_template 配置。
+     */
+    fun setAssistantPromptTemplate(template: String): Boolean {
+        return setConfig("""{"assistant_prompt_template":${JSONObject.quote(template)}}""")
+    }
     
     /**
      * 启用或禁用 thinking 模式（仅对支持的模型有效，如 Qwen3）
@@ -277,6 +364,24 @@ class MNNLlmSession private constructor(
         }
         """.trimIndent()
         return setConfig(configJson)
+    }
+
+    /**
+     * 注册或清除音频波形回调。
+     */
+    fun setAudioDataCallback(callback: MNNLlmNative.AudioDataCallback?): Boolean {
+        return withActiveCall { ptr ->
+            MNNLlmNative.nativeSetAudioDataCallback(ptr, callback)
+        }
+    }
+
+    /**
+     * 触发语音波形生成。
+     */
+    fun generateWavform(): Boolean {
+        return withActiveCall { ptr ->
+            MNNLlmNative.nativeGenerateWavform(ptr)
+        }
     }
     
     /**

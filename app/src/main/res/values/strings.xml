@@ -93,6 +93,8 @@
     <string name="colorpicker_select_cursor_user_bubble">选择命令式用户消息框颜色</string>
     <string name="colorpicker_select_bubble_user_bubble">选择对话式用户气泡颜色</string>
     <string name="colorpicker_select_bubble_ai_bubble">选择对话式AI气泡颜色</string>
+    <string name="colorpicker_select_bubble_user_text">选择对话式用户文字颜色</string>
+    <string name="colorpicker_select_bubble_ai_text">选择对话式AI文字颜色</string>
     <string name="colorpicker_select_color">选择颜色</string>
     <string name="colorpicker_sample_text">示例文本</string>
     <string name="colorpicker_high_contrast">高对比度</string>
@@ -3424,6 +3426,11 @@
     <string name="chat_style_bubble_color_title">对话式气泡颜色</string>
     <string name="chat_style_bubble_user_color">用户气泡</string>
     <string name="chat_style_bubble_ai_color">AI气泡</string>
+    <string name="chat_style_bubble_text_style_title">对话式文字样式</string>
+    <string name="chat_style_bubble_user_text_color">用户文字</string>
+    <string name="chat_style_bubble_ai_text_color">AI文字</string>
+    <string name="chat_style_bubble_user_font_title">用户字体</string>
+    <string name="chat_style_bubble_ai_font_title">AI字体</string>
     <string name="chat_style_bubble_user_image_title">用户气泡图片</string>
     <string name="chat_style_bubble_ai_image_title">AI气泡图片</string>
     <string name="chat_style_bubble_image_desc">启用后使用图片气泡，并支持裁剪与中段重复拉伸</string>
@@ -6548,6 +6555,8 @@
     <string name="enhanced_error_with_message">错误: %1$s</string>
     <string name="enhanced_tool_warning">警告：工具调用和等待用户响应不能同时存在。工具调用被处理了，但这是极具危险性的。</string>
     <string name="enhanced_pure_thinking_only_warning">警告：请输出正文内容，禁止仅输出思考内容。</string>
+    <string name="status_warning_ai_error_summary">ai犯了一个错误</string>
+    <string name="status_warning_ai_error_detail_title">AI错误原因</string>
     <string name="enhanced_receiving_tool_result">正在接收工具执行后的AI响应...</string>
     <string name="enhanced_process_tool_result_failed">处理工具执行结果失败: %1$s</string>
     <string name="enhanced_memory_tools_category">记忆与记忆库工具</string>

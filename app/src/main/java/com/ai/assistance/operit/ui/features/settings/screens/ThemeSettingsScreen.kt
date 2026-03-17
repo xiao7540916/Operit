@@ -54,6 +54,7 @@ import com.ai.assistance.operit.ui.features.settings.sections.ThemeSettingsColor
 import com.ai.assistance.operit.ui.features.settings.sections.ThemeSettingsDisplayOptionsSection
 import com.ai.assistance.operit.ui.features.settings.sections.ThemeSettingsFontSection
 import com.ai.assistance.operit.ui.features.settings.sections.ThemeSettingsThemeModeSection
+import com.ai.assistance.operit.ui.theme.getTextColorForBackground
 import com.ai.assistance.operit.util.AppLogger
 import com.ai.assistance.operit.util.FileUtils
 import com.canhub.cropper.CropImageContract
@@ -291,6 +292,34 @@ fun ThemeSettingsScreen() {
         preferencesManager.bubbleUserBubbleColor.collectAsState(initial = null).value
     val bubbleAiBubbleColor =
         preferencesManager.bubbleAiBubbleColor.collectAsState(initial = null).value
+    val bubbleUserTextColor =
+        preferencesManager.bubbleUserTextColor.collectAsState(initial = null).value
+    val bubbleAiTextColor =
+        preferencesManager.bubbleAiTextColor.collectAsState(initial = null).value
+    val bubbleUserUseCustomFont =
+        preferencesManager.bubbleUserUseCustomFont.collectAsState(initial = false).value
+    val bubbleUserFontType =
+        preferencesManager.bubbleUserFontType.collectAsState(
+            initial = UserPreferencesManager.FONT_TYPE_SYSTEM,
+        ).value
+    val bubbleUserSystemFontName =
+        preferencesManager.bubbleUserSystemFontName.collectAsState(
+            initial = UserPreferencesManager.SYSTEM_FONT_DEFAULT,
+        ).value
+    val bubbleUserCustomFontPath =
+        preferencesManager.bubbleUserCustomFontPath.collectAsState(initial = null).value
+    val bubbleAiUseCustomFont =
+        preferencesManager.bubbleAiUseCustomFont.collectAsState(initial = false).value
+    val bubbleAiFontType =
+        preferencesManager.bubbleAiFontType.collectAsState(
+            initial = UserPreferencesManager.FONT_TYPE_SYSTEM,
+        ).value
+    val bubbleAiSystemFontName =
+        preferencesManager.bubbleAiSystemFontName.collectAsState(
+            initial = UserPreferencesManager.SYSTEM_FONT_DEFAULT,
+        ).value
+    val bubbleAiCustomFontPath =
+        preferencesManager.bubbleAiCustomFontPath.collectAsState(initial = null).value
     val bubbleUserUseImage =
         preferencesManager.bubbleUserUseImage.collectAsState(initial = false).value
     val bubbleAiUseImage =
@@ -415,6 +444,10 @@ fun ThemeSettingsScreen() {
     val defaultCursorUserBubbleColor = MaterialTheme.colorScheme.primaryContainer.toArgb()
     val defaultBubbleUserBubbleColor = MaterialTheme.colorScheme.primaryContainer.toArgb()
     val defaultBubbleAiBubbleColor = MaterialTheme.colorScheme.surface.toArgb()
+    val defaultBubbleUserTextColor =
+        getTextColorForBackground(Color(defaultBubbleUserBubbleColor)).toArgb()
+    val defaultBubbleAiTextColor =
+        getTextColorForBackground(Color(defaultBubbleAiBubbleColor)).toArgb()
     // Mutable state
     var themeModeInput by remember { mutableStateOf(themeMode) }
     var useSystemThemeInput by remember { mutableStateOf(useSystemTheme) }
@@ -482,6 +515,22 @@ fun ThemeSettingsScreen() {
         remember { mutableStateOf(bubbleUserBubbleColor ?: defaultBubbleUserBubbleColor) }
     var bubbleAiBubbleColorInput by
         remember { mutableStateOf(bubbleAiBubbleColor ?: defaultBubbleAiBubbleColor) }
+    var bubbleUserTextColorInput by
+        remember { mutableStateOf(bubbleUserTextColor ?: defaultBubbleUserTextColor) }
+    var bubbleAiTextColorInput by
+        remember { mutableStateOf(bubbleAiTextColor ?: defaultBubbleAiTextColor) }
+    var bubbleUserTextColorCustomizedInput by
+        remember { mutableStateOf(bubbleUserTextColor != null) }
+    var bubbleAiTextColorCustomizedInput by
+        remember { mutableStateOf(bubbleAiTextColor != null) }
+    var bubbleUserUseCustomFontInput by remember { mutableStateOf(bubbleUserUseCustomFont) }
+    var bubbleUserFontTypeInput by remember { mutableStateOf(bubbleUserFontType) }
+    var bubbleUserSystemFontNameInput by remember { mutableStateOf(bubbleUserSystemFontName) }
+    var bubbleUserCustomFontPathInput by remember { mutableStateOf(bubbleUserCustomFontPath) }
+    var bubbleAiUseCustomFontInput by remember { mutableStateOf(bubbleAiUseCustomFont) }
+    var bubbleAiFontTypeInput by remember { mutableStateOf(bubbleAiFontType) }
+    var bubbleAiSystemFontNameInput by remember { mutableStateOf(bubbleAiSystemFontName) }
+    var bubbleAiCustomFontPathInput by remember { mutableStateOf(bubbleAiCustomFontPath) }
     var bubbleUserUseImageInput by remember { mutableStateOf(bubbleUserUseImage) }
     var bubbleAiUseImageInput by remember { mutableStateOf(bubbleAiUseImage) }
     var bubbleUserImageUriInput by remember { mutableStateOf(bubbleUserImageUri) }
@@ -1098,6 +1147,16 @@ fun ThemeSettingsScreen() {
             cursorUserBubbleColor,
             bubbleUserBubbleColor,
             bubbleAiBubbleColor,
+            bubbleUserTextColor,
+            bubbleAiTextColor,
+            bubbleUserUseCustomFont,
+            bubbleUserFontType,
+            bubbleUserSystemFontName,
+            bubbleUserCustomFontPath,
+            bubbleAiUseCustomFont,
+            bubbleAiFontType,
+            bubbleAiSystemFontName,
+            bubbleAiCustomFontPath,
             bubbleUserUseImage,
             bubbleAiUseImage,
             bubbleUserImageUri,
@@ -1182,6 +1241,22 @@ fun ThemeSettingsScreen() {
         cursorUserBubbleColorInput = cursorUserBubbleColor ?: defaultCursorUserBubbleColor
         bubbleUserBubbleColorInput = bubbleUserBubbleColor ?: defaultBubbleUserBubbleColor
         bubbleAiBubbleColorInput = bubbleAiBubbleColor ?: defaultBubbleAiBubbleColor
+        bubbleUserTextColorCustomizedInput = bubbleUserTextColor != null
+        bubbleAiTextColorCustomizedInput = bubbleAiTextColor != null
+        bubbleUserTextColorInput =
+            bubbleUserTextColor
+                ?: getTextColorForBackground(Color(bubbleUserBubbleColorInput)).toArgb()
+        bubbleAiTextColorInput =
+            bubbleAiTextColor
+                ?: getTextColorForBackground(Color(bubbleAiBubbleColorInput)).toArgb()
+        bubbleUserUseCustomFontInput = bubbleUserUseCustomFont
+        bubbleUserFontTypeInput = bubbleUserFontType
+        bubbleUserSystemFontNameInput = bubbleUserSystemFontName
+        bubbleUserCustomFontPathInput = bubbleUserCustomFontPath
+        bubbleAiUseCustomFontInput = bubbleAiUseCustomFont
+        bubbleAiFontTypeInput = bubbleAiFontType
+        bubbleAiSystemFontNameInput = bubbleAiSystemFontName
+        bubbleAiCustomFontPathInput = bubbleAiCustomFontPath
         bubbleUserUseImageInput = bubbleUserUseImage
         bubbleAiUseImageInput = bubbleAiUseImage
         bubbleUserImageUriInput = bubbleUserImageUri
@@ -1228,6 +1303,21 @@ fun ThemeSettingsScreen() {
         fontScaleInput = fontScale
     }
 
+    val effectiveBubbleUserTextColorInput =
+        if (bubbleUserTextColorCustomizedInput) {
+            bubbleUserTextColorInput
+        } else {
+            getTextColorForBackground(Color(bubbleUserBubbleColorInput)).toArgb()
+        }
+    val effectiveBubbleAiTextColorInput =
+        if (bubbleAiTextColorCustomizedInput) {
+            bubbleAiTextColorInput
+        } else {
+            getTextColorForBackground(Color(bubbleAiBubbleColorInput)).toArgb()
+        }
+
+    var fontPickerMode by remember { mutableStateOf("global") }
+
     // 字体文件选择器 launcher
     val fontPickerLauncher =
         rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -1239,16 +1329,46 @@ fun ThemeSettingsScreen() {
                     // 检查是否是支持的字体文件格式
                     if (extension != null && (extension == "ttf" || extension == "otf" || extension == "ttc")) {
                         // 复制字体文件到内部存储
-                        val internalUri = FileUtils.copyFileToInternalStorage(context, uri, "custom_font")
+                        val targetName =
+                            when (fontPickerMode) {
+                                "bubbleUser" -> "bubble_user_font"
+                                "bubbleAi" -> "bubble_ai_font"
+                                else -> "custom_font"
+                            }
+                        val internalUri = FileUtils.copyFileToInternalStorage(context, uri, targetName)
                         if (internalUri != null) {
                             AppLogger.d("ThemeSettings", "Font file saved to: $internalUri")
-                            customFontPathInput = internalUri.toString()
-                            fontTypeInput = UserPreferencesManager.FONT_TYPE_FILE
-                            saveThemeSettingsWithCharacterCard {
-                                preferencesManager.saveThemeSettings(
-                                    customFontPath = internalUri.toString(),
-                                    fontType = UserPreferencesManager.FONT_TYPE_FILE
-                                )
+                            when (fontPickerMode) {
+                                "bubbleUser" -> {
+                                    bubbleUserCustomFontPathInput = internalUri.toString()
+                                    bubbleUserFontTypeInput = UserPreferencesManager.FONT_TYPE_FILE
+                                    saveThemeSettingsWithCharacterCard {
+                                        preferencesManager.saveThemeSettings(
+                                            bubbleUserCustomFontPath = internalUri.toString(),
+                                            bubbleUserFontType = UserPreferencesManager.FONT_TYPE_FILE,
+                                        )
+                                    }
+                                }
+                                "bubbleAi" -> {
+                                    bubbleAiCustomFontPathInput = internalUri.toString()
+                                    bubbleAiFontTypeInput = UserPreferencesManager.FONT_TYPE_FILE
+                                    saveThemeSettingsWithCharacterCard {
+                                        preferencesManager.saveThemeSettings(
+                                            bubbleAiCustomFontPath = internalUri.toString(),
+                                            bubbleAiFontType = UserPreferencesManager.FONT_TYPE_FILE,
+                                        )
+                                    }
+                                }
+                                else -> {
+                                    customFontPathInput = internalUri.toString()
+                                    fontTypeInput = UserPreferencesManager.FONT_TYPE_FILE
+                                    saveThemeSettingsWithCharacterCard {
+                                        preferencesManager.saveThemeSettings(
+                                            customFontPath = internalUri.toString(),
+                                            fontType = UserPreferencesManager.FONT_TYPE_FILE,
+                                        )
+                                    }
+                                }
                             }
                             Toast.makeText(context, context.getString(R.string.font_file_saved, extension), Toast.LENGTH_SHORT).show()
                         } else {
@@ -1440,6 +1560,32 @@ fun ThemeSettingsScreen() {
             cursorUserBubbleColorInput = cursorUserBubbleColorInput,
             bubbleUserBubbleColorInput = bubbleUserBubbleColorInput,
             bubbleAiBubbleColorInput = bubbleAiBubbleColorInput,
+            bubbleUserTextColorInput = effectiveBubbleUserTextColorInput,
+            bubbleAiTextColorInput = effectiveBubbleAiTextColorInput,
+            bubbleUserUseCustomFontInput = bubbleUserUseCustomFontInput,
+            onBubbleUserUseCustomFontInputChange = { bubbleUserUseCustomFontInput = it },
+            bubbleUserFontTypeInput = bubbleUserFontTypeInput,
+            onBubbleUserFontTypeInputChange = { bubbleUserFontTypeInput = it },
+            bubbleUserSystemFontNameInput = bubbleUserSystemFontNameInput,
+            onBubbleUserSystemFontNameInputChange = { bubbleUserSystemFontNameInput = it },
+            bubbleUserCustomFontPathInput = bubbleUserCustomFontPathInput,
+            onBubbleUserCustomFontPathInputChange = { bubbleUserCustomFontPathInput = it },
+            onPickBubbleUserFont = {
+                fontPickerMode = "bubbleUser"
+                fontPickerLauncher.launch("*/*")
+            },
+            bubbleAiUseCustomFontInput = bubbleAiUseCustomFontInput,
+            onBubbleAiUseCustomFontInputChange = { bubbleAiUseCustomFontInput = it },
+            bubbleAiFontTypeInput = bubbleAiFontTypeInput,
+            onBubbleAiFontTypeInputChange = { bubbleAiFontTypeInput = it },
+            bubbleAiSystemFontNameInput = bubbleAiSystemFontNameInput,
+            onBubbleAiSystemFontNameInputChange = { bubbleAiSystemFontNameInput = it },
+            bubbleAiCustomFontPathInput = bubbleAiCustomFontPathInput,
+            onBubbleAiCustomFontPathInputChange = { bubbleAiCustomFontPathInput = it },
+            onPickBubbleAiFont = {
+                fontPickerMode = "bubbleAi"
+                fontPickerLauncher.launch("*/*")
+            },
             previewUserAvatarUri = userAvatarUriInput ?: globalUserAvatarUriInput,
             previewAiAvatarUri = aiAvatarUriInput,
             onShowColorPicker = {
@@ -1585,7 +1731,10 @@ fun ThemeSettingsScreen() {
             onCustomFontPathInputChange = { customFontPathInput = it },
             fontScaleInput = fontScaleInput,
             onFontScaleInputChange = { fontScaleInput = it },
-            fontPickerLauncher = fontPickerLauncher,
+            onPickFont = {
+                fontPickerMode = "global"
+                fontPickerLauncher.launch("*/*")
+            },
         )
 
 
@@ -1664,6 +1813,18 @@ fun ThemeSettingsScreen() {
                         cursorUserBubbleColorInput = defaultCursorUserBubbleColor
                         bubbleUserBubbleColorInput = defaultBubbleUserBubbleColor
                         bubbleAiBubbleColorInput = defaultBubbleAiBubbleColor
+                        bubbleUserTextColorInput = defaultBubbleUserTextColor
+                        bubbleAiTextColorInput = defaultBubbleAiTextColor
+                        bubbleUserTextColorCustomizedInput = false
+                        bubbleAiTextColorCustomizedInput = false
+                        bubbleUserUseCustomFontInput = false
+                        bubbleUserFontTypeInput = UserPreferencesManager.FONT_TYPE_SYSTEM
+                        bubbleUserSystemFontNameInput = UserPreferencesManager.SYSTEM_FONT_DEFAULT
+                        bubbleUserCustomFontPathInput = null
+                        bubbleAiUseCustomFontInput = false
+                        bubbleAiFontTypeInput = UserPreferencesManager.FONT_TYPE_SYSTEM
+                        bubbleAiSystemFontNameInput = UserPreferencesManager.SYSTEM_FONT_DEFAULT
+                        bubbleAiCustomFontPathInput = null
                         bubbleUserUseImageInput = false
                         bubbleAiUseImageInput = false
                         bubbleUserImageUriInput = null
@@ -1745,6 +1906,8 @@ fun ThemeSettingsScreen() {
                     cursorUserBubbleColorInput = cursorUserBubbleColorInput,
                     bubbleUserBubbleColorInput = bubbleUserBubbleColorInput,
                     bubbleAiBubbleColorInput = bubbleAiBubbleColorInput,
+                    bubbleUserTextColorInput = effectiveBubbleUserTextColorInput,
+                    bubbleAiTextColorInput = effectiveBubbleAiTextColorInput,
                     recentColors = recentColors,
                     onColorSelected = {
                         primaryColor,
@@ -1755,7 +1918,9 @@ fun ThemeSettingsScreen() {
                         pipIconColor,
                         cursorUserBubbleColor,
                         bubbleUserBubbleColor,
-                        bubbleAiBubbleColor ->
+                        bubbleAiBubbleColor,
+                        bubbleUserTextColor,
+                        bubbleAiTextColor ->
                         primaryColor?.let { primaryColorInput = it }
                         secondaryColor?.let { secondaryColorInput = it }
                         statusBarColor?.let { customStatusBarColorInput = it }
@@ -1765,6 +1930,14 @@ fun ThemeSettingsScreen() {
                         cursorUserBubbleColor?.let { cursorUserBubbleColorInput = it }
                         bubbleUserBubbleColor?.let { bubbleUserBubbleColorInput = it }
                         bubbleAiBubbleColor?.let { bubbleAiBubbleColorInput = it }
+                        bubbleUserTextColor?.let {
+                            bubbleUserTextColorInput = it
+                            bubbleUserTextColorCustomizedInput = true
+                        }
+                        bubbleAiTextColor?.let {
+                            bubbleAiTextColorInput = it
+                            bubbleAiTextColorCustomizedInput = true
+                        }
 
                         // Save the new color to recent colors
                         val newColor =
@@ -1777,6 +1950,8 @@ fun ThemeSettingsScreen() {
                                         ?: cursorUserBubbleColor
                                         ?: bubbleUserBubbleColor
                                         ?: bubbleAiBubbleColor
+                                        ?: bubbleUserTextColor
+                                        ?: bubbleAiTextColor
                         newColor?.let { scope.launch { preferencesManager.addRecentColor(it) } }
 
                         // Save the colors
@@ -1834,6 +2009,18 @@ fun ThemeSettingsScreen() {
                                         bubbleAiBubbleColor?.let {
                                             preferencesManager.saveThemeSettings(
                                                 bubbleAiBubbleColor = it,
+                                            )
+                                        }
+                                "bubbleUserText" ->
+                                        bubbleUserTextColor?.let {
+                                            preferencesManager.saveThemeSettings(
+                                                bubbleUserTextColor = it,
+                                            )
+                                        }
+                                "bubbleAiText" ->
+                                        bubbleAiTextColor?.let {
+                                            preferencesManager.saveThemeSettings(
+                                                bubbleAiTextColor = it,
                                             )
                                         }
                             }

@@ -349,12 +349,7 @@ class ModelConfigManager(private val context: Context) {
             strictToolCall: Boolean
     ): ModelConfigData {
         return updateConfigInternal(configId) {
-            val resolvedEnableToolCall =
-                if (apiProviderType == ApiProviderType.MNN) {
-                    false
-                } else {
-                    enableToolCall
-                }
+            val resolvedEnableToolCall = enableToolCall
             val resolvedStrictToolCall =
                 if (resolvedEnableToolCall) {
                     strictToolCall
@@ -504,12 +499,7 @@ class ModelConfigManager(private val context: Context) {
     // 更新 Tool Call 配置
     suspend fun updateToolCall(configId: String, enableToolCall: Boolean): ModelConfigData {
         return updateConfigInternal(configId) {
-            val resolvedEnableToolCall =
-                if (it.apiProviderType == ApiProviderType.MNN) {
-                    false
-                } else {
-                    enableToolCall
-                }
+            val resolvedEnableToolCall = enableToolCall
             it.copy(
                     enableToolCall = resolvedEnableToolCall,
                     strictToolCall = if (resolvedEnableToolCall) it.strictToolCall else false

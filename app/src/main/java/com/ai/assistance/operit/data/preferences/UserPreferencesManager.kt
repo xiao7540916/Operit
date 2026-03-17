@@ -139,6 +139,22 @@ class UserPreferencesManager private constructor(private val context: Context) {
         private val CURSOR_USER_BUBBLE_COLOR = intPreferencesKey("cursor_user_bubble_color")
         private val BUBBLE_USER_BUBBLE_COLOR = intPreferencesKey("bubble_user_bubble_color")
         private val BUBBLE_AI_BUBBLE_COLOR = intPreferencesKey("bubble_ai_bubble_color")
+        private val BUBBLE_USER_TEXT_COLOR = intPreferencesKey("bubble_user_text_color")
+        private val BUBBLE_AI_TEXT_COLOR = intPreferencesKey("bubble_ai_text_color")
+        private val BUBBLE_USER_USE_CUSTOM_FONT =
+            booleanPreferencesKey("bubble_user_use_custom_font")
+        private val BUBBLE_USER_FONT_TYPE = stringPreferencesKey("bubble_user_font_type")
+        private val BUBBLE_USER_SYSTEM_FONT_NAME =
+            stringPreferencesKey("bubble_user_system_font_name")
+        private val BUBBLE_USER_CUSTOM_FONT_PATH =
+            stringPreferencesKey("bubble_user_custom_font_path")
+        private val BUBBLE_AI_USE_CUSTOM_FONT =
+            booleanPreferencesKey("bubble_ai_use_custom_font")
+        private val BUBBLE_AI_FONT_TYPE = stringPreferencesKey("bubble_ai_font_type")
+        private val BUBBLE_AI_SYSTEM_FONT_NAME =
+            stringPreferencesKey("bubble_ai_system_font_name")
+        private val BUBBLE_AI_CUSTOM_FONT_PATH =
+            stringPreferencesKey("bubble_ai_custom_font_path")
         private val BUBBLE_USER_USE_IMAGE = booleanPreferencesKey("bubble_user_use_image")
         private val BUBBLE_AI_USE_IMAGE = booleanPreferencesKey("bubble_ai_use_image")
         private val BUBBLE_USER_IMAGE_URI = stringPreferencesKey("bubble_user_image_uri")
@@ -515,6 +531,56 @@ class UserPreferencesManager private constructor(private val context: Context) {
     val bubbleAiBubbleColor: Flow<Int?> =
         context.userPreferencesDataStore.data.map { preferences ->
             preferences[BUBBLE_AI_BUBBLE_COLOR]
+        }
+
+    val bubbleUserTextColor: Flow<Int?> =
+        context.userPreferencesDataStore.data.map { preferences ->
+            preferences[BUBBLE_USER_TEXT_COLOR]
+        }
+
+    val bubbleAiTextColor: Flow<Int?> =
+        context.userPreferencesDataStore.data.map { preferences ->
+            preferences[BUBBLE_AI_TEXT_COLOR]
+        }
+
+    val bubbleUserUseCustomFont: Flow<Boolean> =
+        context.userPreferencesDataStore.data.map { preferences ->
+            preferences[BUBBLE_USER_USE_CUSTOM_FONT] ?: false
+        }
+
+    val bubbleUserFontType: Flow<String> =
+        context.userPreferencesDataStore.data.map { preferences ->
+            preferences[BUBBLE_USER_FONT_TYPE] ?: FONT_TYPE_SYSTEM
+        }
+
+    val bubbleUserSystemFontName: Flow<String> =
+        context.userPreferencesDataStore.data.map { preferences ->
+            preferences[BUBBLE_USER_SYSTEM_FONT_NAME] ?: SYSTEM_FONT_DEFAULT
+        }
+
+    val bubbleUserCustomFontPath: Flow<String?> =
+        context.userPreferencesDataStore.data.map { preferences ->
+            preferences[BUBBLE_USER_CUSTOM_FONT_PATH]
+        }
+
+    val bubbleAiUseCustomFont: Flow<Boolean> =
+        context.userPreferencesDataStore.data.map { preferences ->
+            preferences[BUBBLE_AI_USE_CUSTOM_FONT] ?: false
+        }
+
+    val bubbleAiFontType: Flow<String> =
+        context.userPreferencesDataStore.data.map { preferences ->
+            preferences[BUBBLE_AI_FONT_TYPE] ?: FONT_TYPE_SYSTEM
+        }
+
+    val bubbleAiSystemFontName: Flow<String> =
+        context.userPreferencesDataStore.data.map { preferences ->
+            preferences[BUBBLE_AI_SYSTEM_FONT_NAME] ?: SYSTEM_FONT_DEFAULT
+        }
+
+    val bubbleAiCustomFontPath: Flow<String?> =
+        context.userPreferencesDataStore.data.map { preferences ->
+            preferences[BUBBLE_AI_CUSTOM_FONT_PATH]
         }
 
     val bubbleUserUseImage: Flow<Boolean> =
@@ -944,6 +1010,16 @@ class UserPreferencesManager private constructor(private val context: Context) {
             cursorUserBubbleColor: Int? = null,
             bubbleUserBubbleColor: Int? = null,
             bubbleAiBubbleColor: Int? = null,
+            bubbleUserTextColor: Int? = null,
+            bubbleAiTextColor: Int? = null,
+            bubbleUserUseCustomFont: Boolean? = null,
+            bubbleUserFontType: String? = null,
+            bubbleUserSystemFontName: String? = null,
+            bubbleUserCustomFontPath: String? = null,
+            bubbleAiUseCustomFont: Boolean? = null,
+            bubbleAiFontType: String? = null,
+            bubbleAiSystemFontName: String? = null,
+            bubbleAiCustomFontPath: String? = null,
             bubbleUserUseImage: Boolean? = null,
             bubbleAiUseImage: Boolean? = null,
             bubbleUserImageUri: String? = null,
@@ -1033,6 +1109,16 @@ class UserPreferencesManager private constructor(private val context: Context) {
             cursorUserBubbleColor?.let { preferences[CURSOR_USER_BUBBLE_COLOR] = it }
             bubbleUserBubbleColor?.let { preferences[BUBBLE_USER_BUBBLE_COLOR] = it }
             bubbleAiBubbleColor?.let { preferences[BUBBLE_AI_BUBBLE_COLOR] = it }
+            bubbleUserTextColor?.let { preferences[BUBBLE_USER_TEXT_COLOR] = it }
+            bubbleAiTextColor?.let { preferences[BUBBLE_AI_TEXT_COLOR] = it }
+            bubbleUserUseCustomFont?.let { preferences[BUBBLE_USER_USE_CUSTOM_FONT] = it }
+            bubbleUserFontType?.let { preferences[BUBBLE_USER_FONT_TYPE] = it }
+            bubbleUserSystemFontName?.let { preferences[BUBBLE_USER_SYSTEM_FONT_NAME] = it }
+            bubbleUserCustomFontPath?.let { preferences[BUBBLE_USER_CUSTOM_FONT_PATH] = it }
+            bubbleAiUseCustomFont?.let { preferences[BUBBLE_AI_USE_CUSTOM_FONT] = it }
+            bubbleAiFontType?.let { preferences[BUBBLE_AI_FONT_TYPE] = it }
+            bubbleAiSystemFontName?.let { preferences[BUBBLE_AI_SYSTEM_FONT_NAME] = it }
+            bubbleAiCustomFontPath?.let { preferences[BUBBLE_AI_CUSTOM_FONT_PATH] = it }
             bubbleUserUseImage?.let { preferences[BUBBLE_USER_USE_IMAGE] = it }
             bubbleAiUseImage?.let { preferences[BUBBLE_AI_USE_IMAGE] = it }
             bubbleUserImageUri?.let { preferences[BUBBLE_USER_IMAGE_URI] = it }
@@ -1120,6 +1206,16 @@ class UserPreferencesManager private constructor(private val context: Context) {
             preferences.remove(CURSOR_USER_BUBBLE_COLOR)
             preferences.remove(BUBBLE_USER_BUBBLE_COLOR)
             preferences.remove(BUBBLE_AI_BUBBLE_COLOR)
+            preferences.remove(BUBBLE_USER_TEXT_COLOR)
+            preferences.remove(BUBBLE_AI_TEXT_COLOR)
+            preferences.remove(BUBBLE_USER_USE_CUSTOM_FONT)
+            preferences.remove(BUBBLE_USER_FONT_TYPE)
+            preferences.remove(BUBBLE_USER_SYSTEM_FONT_NAME)
+            preferences.remove(BUBBLE_USER_CUSTOM_FONT_PATH)
+            preferences.remove(BUBBLE_AI_USE_CUSTOM_FONT)
+            preferences.remove(BUBBLE_AI_FONT_TYPE)
+            preferences.remove(BUBBLE_AI_SYSTEM_FONT_NAME)
+            preferences.remove(BUBBLE_AI_CUSTOM_FONT_PATH)
             preferences.remove(BUBBLE_USER_USE_IMAGE)
             preferences.remove(BUBBLE_AI_USE_IMAGE)
             preferences.remove(BUBBLE_USER_IMAGE_URI)
@@ -1413,7 +1509,9 @@ class UserPreferencesManager private constructor(private val context: Context) {
             THEME_MODE, BACKGROUND_IMAGE_URI, BACKGROUND_MEDIA_TYPE, APP_BAR_CONTENT_COLOR_MODE,
             CHAT_STYLE, KEY_CUSTOM_USER_AVATAR_URI, KEY_CUSTOM_AI_AVATAR_URI, KEY_AVATAR_SHAPE,
             KEY_ON_COLOR_MODE, KEY_CUSTOM_CHAT_TITLE, INPUT_STYLE, FONT_TYPE, SYSTEM_FONT_NAME,
-            CUSTOM_FONT_PATH, BUBBLE_USER_IMAGE_URI, BUBBLE_AI_IMAGE_URI,
+            CUSTOM_FONT_PATH, BUBBLE_USER_FONT_TYPE, BUBBLE_USER_SYSTEM_FONT_NAME,
+            BUBBLE_USER_CUSTOM_FONT_PATH, BUBBLE_AI_FONT_TYPE, BUBBLE_AI_SYSTEM_FONT_NAME,
+            BUBBLE_AI_CUSTOM_FONT_PATH, BUBBLE_USER_IMAGE_URI, BUBBLE_AI_IMAGE_URI,
             BUBBLE_IMAGE_RENDER_MODE
             // 注意：全局用户头像和名称已移至 DisplayPreferencesManager，不跟随角色卡主题切换
         )
@@ -1427,7 +1525,8 @@ class UserPreferencesManager private constructor(private val context: Context) {
             FORCE_APP_BAR_CONTENT_COLOR_ENABLED, CHAT_HEADER_OVERLAY_MODE, USE_BACKGROUND_BLUR,
             BUBBLE_SHOW_AVATAR, BUBBLE_WIDE_LAYOUT_ENABLED, CURSOR_USER_BUBBLE_FOLLOW_THEME, CURSOR_USER_BUBBLE_LIQUID_GLASS, BUBBLE_USER_USE_IMAGE,
             BUBBLE_AI_USE_IMAGE, BUBBLE_USER_ROUNDED_CORNERS_ENABLED, BUBBLE_AI_ROUNDED_CORNERS_ENABLED, KEY_SHOW_THINKING_PROCESS, KEY_SHOW_STATUS_TAGS,
-            KEY_SHOW_INPUT_PROCESSING_STATUS, KEY_SHOW_CHAT_FLOATING_DOTS_ANIMATION, USE_CUSTOM_FONT
+            KEY_SHOW_INPUT_PROCESSING_STATUS, KEY_SHOW_CHAT_FLOATING_DOTS_ANIMATION, USE_CUSTOM_FONT,
+            BUBBLE_USER_USE_CUSTOM_FONT, BUBBLE_AI_USE_CUSTOM_FONT
             // 注意：消息显示设置已移至 DisplayPreferencesManager，不跟随角色卡主题切换
         )
     }
@@ -1436,7 +1535,8 @@ class UserPreferencesManager private constructor(private val context: Context) {
         return listOf(
             CUSTOM_PRIMARY_COLOR, CUSTOM_SECONDARY_COLOR, CUSTOM_APP_BAR_COLOR,
             CUSTOM_STATUS_BAR_COLOR, CHAT_HEADER_HISTORY_ICON_COLOR, CHAT_HEADER_PIP_ICON_COLOR,
-            CURSOR_USER_BUBBLE_COLOR, BUBBLE_USER_BUBBLE_COLOR, BUBBLE_AI_BUBBLE_COLOR
+            CURSOR_USER_BUBBLE_COLOR, BUBBLE_USER_BUBBLE_COLOR, BUBBLE_AI_BUBBLE_COLOR,
+            BUBBLE_USER_TEXT_COLOR, BUBBLE_AI_TEXT_COLOR
         )
     }
 

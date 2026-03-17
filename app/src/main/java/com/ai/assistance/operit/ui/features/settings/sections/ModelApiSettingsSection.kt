@@ -135,13 +135,6 @@ fun ModelApiSettingsSection(
     var enableToolCallInput by remember(config.id) { mutableStateOf(config.enableToolCall) }
     var strictToolCallInput by remember(config.id) { mutableStateOf(config.strictToolCall) }
 
-    LaunchedEffect(config.id, selectedApiProvider) {
-        if (selectedApiProvider == ApiProviderType.MNN) {
-            enableToolCallInput = false
-            strictToolCallInput = false
-        }
-    }
-
     LaunchedEffect(enableToolCallInput) {
         if (!enableToolCallInput) {
             strictToolCallInput = false
@@ -761,11 +754,10 @@ fun ModelApiSettingsSection(
                     if (!it) {
                         strictToolCallInput = false
                     }
-                },
-                enabled = selectedApiProvider != ApiProviderType.MNN
+                }
             )
 
-            if (enableToolCallInput && selectedApiProvider != ApiProviderType.MNN) {
+            if (enableToolCallInput) {
                 SettingsSwitchRow(
                     title = stringResource(R.string.strict_tool_call),
                     subtitle = stringResource(R.string.strict_tool_call_desc),

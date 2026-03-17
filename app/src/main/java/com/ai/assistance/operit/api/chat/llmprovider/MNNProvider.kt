@@ -34,7 +34,7 @@ class MNNProvider(
     private val forwardType: Int,
     private val threadCount: Int,
     private val providerType: ApiProviderType = ApiProviderType.MNN,
-    private val enableToolCall: Boolean = false, // 是否启用Tool Call接口（本地推理暂未实现）
+    private val enableToolCall: Boolean = false,
     private val supportsVision: Boolean = false,
     private val supportsAudio: Boolean = false,
     private val supportsVideo: Boolean = false
@@ -466,6 +466,84 @@ class MNNProvider(
         return trimmed
     }
 
+    private fun trimHistoryToStructuredTokenBudget(
+        session: MNNLlmSession,
+        history: List<Pair<String, String>>,
+        maxPromptTokens: Int,
+        toolsJson: String?,
+        preserveThinkInHistory: Boolean
+    ): List<Pair<String, String>> {
+        if (history.isEmpty()) return history
+
+        val systemPrefixCount = if (history.first().first == "system") 1 else 0
+
+        fun countCandidate(candidate: List<Pair<String, String>>): Int {
+            val messagesJson = MNNStructuredToolCallBridge.buildMessagesJson(candidate, preserveThinkInHistory)
+            return session.countTokensStructured(messagesJson, toolsJson)
+        }
+
+        val fullTokens = kotlin.runCatching { countCandidate(history) }.getOrDefault(Int.MAX_VALUE)
+        if (fullTokens <= maxPromptTokens) return history
+
+        if (history.size <= systemPrefixCount + 1) {
+            if (systemPrefixCount == 1) {
+                val withoutSystem = history.drop(1)
+                val withoutSystemTokens =
+                    kotlin.runCatching { countCandidate(withoutSystem) }.getOrDefault(Int.MAX_VALUE)
+                if (withoutSystemTokens <= maxPromptTokens) {
+                    return withoutSystem
+                }
+            }
+            return history
+        }
+
+        var low = systemPrefixCount
+        var high = history.size - 1
+        while (low < high) {
+            val mid = (low + high) / 2
+            val candidate = ArrayList<Pair<String, String>>(history.size - (mid - systemPrefixCount))
+            if (systemPrefixCount == 1) {
+                candidate.add(history[0])
+            }
+            for (i in mid until history.size) {
+                candidate.add(history[i])
+            }
+
+            val tokens = kotlin.runCatching { countCandidate(candidate) }.getOrDefault(Int.MAX_VALUE)
+            if (tokens > maxPromptTokens) {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+
+        val trimmed = ArrayList<Pair<String, String>>(history.size - (low - systemPrefixCount))
+        if (systemPrefixCount == 1) {
+            trimmed.add(history[0])
+        }
+        for (i in low until history.size) {
+            trimmed.add(history[i])
+        }
+
+        if (systemPrefixCount == 1) {
+            val trimmedTokens = kotlin.runCatching { countCandidate(trimmed) }.getOrDefault(Int.MAX_VALUE)
+            if (trimmedTokens > maxPromptTokens) {
+                val withoutSystem = trimmed.drop(1)
+                val withoutSystemTokens =
+                    kotlin.runCatching { countCandidate(withoutSystem) }.getOrDefault(Int.MAX_VALUE)
+                if (withoutSystemTokens <= maxPromptTokens) {
+                    return withoutSystem
+                }
+            }
+        }
+
+        return trimmed
+    }
+
+    private fun shouldUseInternalToolCall(availableTools: List<ToolPrompt>?): Boolean {
+        return enableToolCall && !availableTools.isNullOrEmpty()
+    }
+
     /**
      * 估算Token数（备用方法，假设平均4个字符为1个token）
      */
@@ -546,6 +624,7 @@ class MNNProvider(
                 return@stream
             }
 
+            val useInternalToolCall = shouldUseInternalToolCall(availableTools)
             // 构建历史记录（添加当前消息）
             val fullHistory = chatHistory.toMutableList().apply { add("user" to message) }
 
@@ -565,35 +644,91 @@ class MNNProvider(
             val effectiveMaxNewTokens = (if (requestedMaxNewTokens > 0) requestedMaxNewTokens else 512).coerceAtMost(8192)
             val maxPromptTokens = (maxAllTokens - effectiveMaxNewTokens).coerceAtLeast(128)
 
-            val safeHistory = trimHistoryToTokenBudget(session, multimodalHistory, maxPromptTokens)
+            val toolsJson = if (useInternalToolCall) {
+                MNNStructuredToolCallBridge.buildToolsJson(availableTools)
+            } else {
+                null
+            }
 
-            _inputTokenCount = kotlin.runCatching { session.countTokensWithHistory(safeHistory) }
-                .getOrElse { countTokens(buildPrompt(message, chatHistory)) }
+            val safeHistory = if (useInternalToolCall) {
+                trimHistoryToStructuredTokenBudget(
+                    session = session,
+                    history = multimodalHistory,
+                    maxPromptTokens = maxPromptTokens,
+                    toolsJson = toolsJson,
+                    preserveThinkInHistory = preserveThinkInHistory
+                )
+            } else {
+                trimHistoryToTokenBudget(session, multimodalHistory, maxPromptTokens)
+            }
+
+            val messagesJson = if (useInternalToolCall) {
+                MNNStructuredToolCallBridge.buildMessagesJson(safeHistory, preserveThinkInHistory)
+            } else {
+                null
+            }
+
+            _inputTokenCount = if (useInternalToolCall) {
+                session.countTokensStructured(messagesJson!!, toolsJson)
+            } else {
+                kotlin.runCatching { session.countTokensWithHistory(safeHistory) }
+                    .getOrElse { countTokens(buildPrompt(message, chatHistory)) }
+            }
             onTokensUpdated(_inputTokenCount, 0, 0)
 
-            AppLogger.d(TAG, "开始MNN LLM推理，历史消息数: ${multimodalHistory.size}, thinking模式: $enableThinking")
+            AppLogger.d(
+                TAG,
+                "开始MNN LLM推理，历史消息数: ${multimodalHistory.size}, thinking模式: $enableThinking, toolCall=$useInternalToolCall"
+            )
 
-            // 使用流式生成（传递历史记录，让LLM内部应用chat template）
             var outputTokenCount = 0
-            val success = session.generateStream(safeHistory, requestedMaxNewTokens) { token ->
-                if (isCancelled) {
-                    false  // 停止生成
-                } else {
-                    // 更新输出token计数（估算）
-                    outputTokenCount += 1
-                    _outputTokenCount = outputTokenCount
-                    
-                    // 发送 token
-                    runBlocking { emit(token) }
-                    
-                    // 更新token统计（在IO线程中异步执行）
-                    kotlin.runCatching {
-                        kotlinx.coroutines.runBlocking {
-                            onTokensUpdated(_inputTokenCount, 0, _outputTokenCount)
+            val toolCallOutputBuffer = StringBuilder()
+            val emitDirectly = !useInternalToolCall
+            val success = if (useInternalToolCall) {
+                session.generateStreamStructured(messagesJson!!, toolsJson, requestedMaxNewTokens) { token ->
+                    if (isCancelled) {
+                        false
+                    } else {
+                        outputTokenCount += 1
+                        _outputTokenCount = outputTokenCount
+                        toolCallOutputBuffer.append(token)
+
+                        kotlin.runCatching {
+                            kotlinx.coroutines.runBlocking {
+                                onTokensUpdated(_inputTokenCount, 0, _outputTokenCount)
+                            }
                         }
+                        true
                     }
-                    
-                    true  // 继续生成
+                }
+            } else {
+                session.generateStream(safeHistory, requestedMaxNewTokens) { token ->
+                    if (isCancelled) {
+                        false  // 停止生成
+                    } else {
+                        // 更新输出token计数（估算）
+                        outputTokenCount += 1
+                        _outputTokenCount = outputTokenCount
+
+                        if (emitDirectly) {
+                            runBlocking { emit(token) }
+                        }
+
+                        kotlin.runCatching {
+                            kotlinx.coroutines.runBlocking {
+                                onTokensUpdated(_inputTokenCount, 0, _outputTokenCount)
+                            }
+                        }
+
+                        true  // 继续生成
+                    }
+                }
+            }
+
+            if (useInternalToolCall && toolCallOutputBuffer.isNotEmpty()) {
+                val converted = MNNStructuredToolCallBridge.convertToolCallPayloadToXml(toolCallOutputBuffer.toString())
+                if (converted.isNotBlank()) {
+                    emit(converted)
                 }
             }
 

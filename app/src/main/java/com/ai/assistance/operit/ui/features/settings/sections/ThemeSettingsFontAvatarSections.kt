@@ -57,7 +57,7 @@ internal fun ThemeSettingsFontSection(
     onCustomFontPathInputChange: (String?) -> Unit,
     fontScaleInput: Float,
     onFontScaleInputChange: (Float) -> Unit,
-    fontPickerLauncher: ManagedActivityResultLauncher<String, Uri?>,
+    onPickFont: () -> Unit,
 ) {
     ThemeSettingsSectionTitle(
         title = stringResource(R.string.theme_font_settings),
@@ -206,7 +206,7 @@ internal fun ThemeSettingsFontSection(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             androidx.compose.material3.Button(
-                                onClick = { fontPickerLauncher.launch("*/*") },
+                                onClick = onPickFont,
                                 modifier = Modifier.weight(1f),
                             ) {
                                 Icon(

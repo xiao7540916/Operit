@@ -12,6 +12,7 @@ import com.ai.assistance.operit.util.AssetCopyUtils
 import com.ai.assistance.operit.util.ChatMarkupRegex
 import com.ai.assistance.operit.util.ImagePoolManager
 import com.ai.assistance.operit.util.MediaPoolManager
+import kotlinx.coroutines.CancellationException
 
 enum class ModelConnectionTestType {
     CHAT,
@@ -67,7 +68,15 @@ object ModelConfigConnectionTester {
             val parameters = modelConfigManager.getModelParametersForConfig(configForTest.id)
 
             suspend fun runCase(type: ModelConnectionTestType, block: suspend () -> Unit) {
-                val result = runCatching { block() }
+                val result =
+                    try {
+                        block()
+                        Result.success(Unit)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Result.failure(e)
+                    }
                 items.add(
                     ModelConnectionTestItem(
                         type = type,
@@ -133,10 +142,16 @@ object ModelConfigConnectionTester {
                     if (configForTest.strictToolCall) {
                         runToolCallTest("echo")
                     } else {
-                        val strictProbeResult = runCatching {
-                            runToolCallTest("strict_probe_unlisted_tool")
-                        }
-                        if (strictProbeResult.isFailure) {
+                        val strictProbeFailed =
+                            try {
+                                runToolCallTest("strict_probe_unlisted_tool")
+                                false
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Exception) {
+                                true
+                            }
+                        if (strictProbeFailed) {
                             strictToolCallFallbackUsed = true
                             runToolCallTest("echo")
                         }
@@ -230,6 +245,8 @@ object ModelConfigConnectionTester {
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (items.none { it.type == ModelConnectionTestType.CHAT }) {
                 items.add(

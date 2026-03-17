@@ -211,6 +211,10 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
         preferencesManager.bubbleUserBubbleColor.collectAsState(initial = null)
     val bubbleAiBubbleColorValue by
         preferencesManager.bubbleAiBubbleColor.collectAsState(initial = null)
+    val bubbleUserTextColorValue by
+        preferencesManager.bubbleUserTextColor.collectAsState(initial = null)
+    val bubbleAiTextColorValue by
+        preferencesManager.bubbleAiTextColor.collectAsState(initial = null)
     val bubbleUserUseImage by
         preferencesManager.bubbleUserUseImage.collectAsState(initial = false)
     val bubbleAiUseImage by
@@ -420,6 +424,8 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
     val cursorCustomUserMessageColor = cursorUserBubbleColorValue?.let(::Color)
     val bubbleCustomUserMessageColor = bubbleUserBubbleColorValue?.let(::Color)
     val bubbleCustomAiMessageColor = bubbleAiBubbleColorValue?.let(::Color)
+    val bubbleCustomUserTextColor = bubbleUserTextColorValue?.let(::Color)
+    val bubbleCustomAiTextColor = bubbleAiTextColorValue?.let(::Color)
 
     val userMessageColor =
         when (chatStyle) {
@@ -442,11 +448,15 @@ val actualViewModel: ChatViewModel = viewModel ?: viewModel { ChatViewModel(cont
         when {
             chatStyle == ChatStyle.CURSOR && cursorUserBubbleFollowTheme ->
                 MaterialTheme.colorScheme.onPrimaryContainer
+            chatStyle == ChatStyle.BUBBLE && bubbleCustomUserTextColor != null ->
+                bubbleCustomUserTextColor
             else -> getTextColorForBackground(userMessageColor.copy(alpha = 1f))
         }
     val aiTextColor =
         when {
-            chatStyle == ChatStyle.BUBBLE && bubbleCustomAiMessageColor != null ->
+            chatStyle == ChatStyle.BUBBLE && bubbleCustomAiTextColor != null ->
+                bubbleCustomAiTextColor
+            chatStyle == ChatStyle.BUBBLE ->
                 getTextColorForBackground(aiMessageColor.copy(alpha = 1f))
             else -> MaterialTheme.colorScheme.onSurface
         }

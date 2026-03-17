@@ -132,6 +132,7 @@ class ChatViewModel(private val context: Context) : ViewModel() {
     private val workspaceTerminalSessions = mutableMapOf<String, String>()
     private var workspaceCommandExecutionJob: Job? = null
     private var workspaceOpenJob: Job? = null
+    private var inputProcessingStateListenerJob: Job? = null
 
     private lateinit var mainChatCore: ChatServiceCore
     private lateinit var attachmentDelegate: AttachmentDelegate
@@ -515,7 +516,8 @@ class ChatViewModel(private val context: Context) : ViewModel() {
      */
     private fun setupInputProcessingStateListener(service: EnhancedAIService) {
         AppLogger.d(TAG, "EnhancedAIService 已就绪，开始监听输入处理状态")
-        viewModelScope.launch {
+        inputProcessingStateListenerJob?.cancel()
+        inputProcessingStateListenerJob = viewModelScope.launch {
             try {
                 service.inputProcessingState.collect { state ->
                     if (::messageProcessingDelegate.isInitialized && messageProcessingDelegate.isLoading.value) {
@@ -546,6 +548,8 @@ class ChatViewModel(private val context: Context) : ViewModel() {
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                AppLogger.d(TAG, "输入处理状态监听已取消")
             } catch (e: Exception) {
                 AppLogger.e(TAG, "输入处理状态收集出错: ${e.message}", e)
                 uiStateDelegate.showErrorMessage(context.getString(R.string.chat_input_processing_collect_failed, e.message ?: ""))
@@ -1782,6 +1786,7 @@ class ChatViewModel(private val context: Context) : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
+        inputProcessingStateListenerJob?.cancel()
         // 清理悬浮窗资源
         floatingWindowDelegate.cleanup()
 

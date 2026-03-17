@@ -56,6 +56,8 @@ import com.ai.assistance.operit.api.chat.llmprovider.MediaLinkParser
 import com.ai.assistance.operit.util.ImageBitmapLimiter
 import com.ai.assistance.operit.util.ImagePoolManager
 import com.ai.assistance.operit.util.ChatMarkupRegex
+import com.ai.assistance.operit.ui.theme.applyFontFamilyToTypography
+import com.ai.assistance.operit.ui.theme.resolveConfiguredFontFamily
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -87,6 +89,18 @@ fun BubbleUserMessageComposable(
     val showUserName by displayPreferencesManager.showUserName.collectAsState(initial = false)
     val avatarShapePref by preferencesManager.avatarShape.collectAsState(initial = UserPreferencesManager.AVATAR_SHAPE_CIRCLE)
     val avatarCornerRadius by preferencesManager.avatarCornerRadius.collectAsState(initial = 8f)
+    val bubbleUserUseCustomFont by
+        preferencesManager.bubbleUserUseCustomFont.collectAsState(initial = false)
+    val bubbleUserFontType by
+        preferencesManager.bubbleUserFontType.collectAsState(
+            initial = UserPreferencesManager.FONT_TYPE_SYSTEM,
+        )
+    val bubbleUserSystemFontName by
+        preferencesManager.bubbleUserSystemFontName.collectAsState(
+            initial = UserPreferencesManager.SYSTEM_FONT_DEFAULT,
+        )
+    val bubbleUserCustomFontPath by
+        preferencesManager.bubbleUserCustomFontPath.collectAsState(initial = null)
     val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
 
@@ -145,7 +159,30 @@ fun BubbleUserMessageComposable(
     // 添加状态控制图片预览
     val showImagePreview = remember { mutableStateOf(false) }
     val selectedImageBitmap = remember { mutableStateOf<Bitmap?>(null) }
+    val baseTypography = MaterialTheme.typography
+    val bubbleTypography =
+        remember(
+            context,
+            bubbleUserUseCustomFont,
+            bubbleUserFontType,
+            bubbleUserSystemFontName,
+            bubbleUserCustomFontPath,
+            baseTypography,
+        ) {
+            applyFontFamilyToTypography(
+                baseTypography = baseTypography,
+                fontFamily =
+                    resolveConfiguredFontFamily(
+                        context = context,
+                        useCustomFont = bubbleUserUseCustomFont,
+                        fontType = bubbleUserFontType,
+                        systemFontName = bubbleUserSystemFontName,
+                        customFontPath = bubbleUserCustomFontPath,
+                    ),
+            )
+        }
 
+    MaterialTheme(typography = bubbleTypography) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -500,6 +537,7 @@ fun BubbleUserMessageComposable(
             }
         }
         }
+    }
     }
 
     // 内容预览对话框

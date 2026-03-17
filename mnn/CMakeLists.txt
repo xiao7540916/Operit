@@ -56,6 +56,8 @@ target_include_directories(MNNWrapper PRIVATE
     ${MNN_SOURCE_DIR}/source
     ${MNN_SOURCE_DIR}/express
     ${MNN_SOURCE_DIR}/transformers/llm/engine/include
+    ${MNN_SOURCE_DIR}/transformers/llm/engine/src
+    ${MNN_SOURCE_DIR}/3rd_party
 )
 
 # 添加编译选项以解决 TLS 问题
@@ -63,6 +65,7 @@ target_compile_options(MNNWrapper PRIVATE -fno-emulated-tls)
 target_compile_options(MNN PRIVATE -fno-emulated-tls)
 if(TARGET llm)
     target_compile_options(llm PRIVATE -fno-emulated-tls)
+    target_compile_options(MNNWrapper PRIVATE -DLLM_USE_MINJA)
 endif()
 
 # 链接 MNN 库

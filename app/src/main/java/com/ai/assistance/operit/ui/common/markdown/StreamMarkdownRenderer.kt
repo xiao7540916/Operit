@@ -65,6 +65,7 @@ import com.ai.assistance.operit.util.streamnative.nativeMarkdownSplitByBlock
 import com.ai.assistance.operit.util.streamnative.nativeMarkdownSplitByInline
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -86,6 +87,36 @@ private fun MarkdownNode.toStableNode(): MarkdownNodeStable {
         content = this.content.toString(),
         children = this.children.map { it.toStableNode() }
     )
+}
+
+private fun areRenderNodesSynchronized(
+    nodes: SnapshotStateList<MarkdownNode>,
+    renderNodes: SnapshotStateList<MarkdownNodeStable>,
+    conversionCache: MutableMap<Int, Pair<Int, MarkdownNodeStable>>,
+): Boolean {
+    if (nodes.isEmpty() || nodes.size != renderNodes.size) {
+        return false
+    }
+
+    nodes.forEachIndexed { index, sourceNode ->
+        val contentLength = sourceNode.content.length
+        val cached = conversionCache[index]
+        val freshStableNode = sourceNode.toStableNode()
+        val stableNode =
+            if (cached != null && cached.first == contentLength && cached.second == freshStableNode) {
+                cached.second
+            } else {
+                freshStableNode.also {
+                    conversionCache[index] = contentLength to it
+                }
+            }
+
+        if (renderNodes[index] != stableNode) {
+            return false
+        }
+    }
+
+    return true
 }
 
 // XML内容渲染器接口，用于自定义XML渲染
@@ -188,6 +219,8 @@ class StreamMarkdownRendererState {
     val collectedContent = SmartString()
     // XML 节点对应的子流（仅流式渲染有效）
     val xmlNodeStreams = mutableStateMapOf<Int, Stream<String>>()
+    // 标记流式 Markdown 解析是否自然结束；若因切换静态而被取消，则不能信任现有节点
+    var streamParsingCompletedSuccessfully: Boolean = false
     // 渲染器ID
     var rendererId: String = ""
         private set
@@ -209,6 +242,7 @@ class StreamMarkdownRendererState {
         conversionCache.clear()
         collectedContent.clear()
         xmlNodeStreams.clear()
+        streamParsingCompletedSuccessfully = false
     }
 }
 
@@ -293,6 +327,7 @@ fun StreamMarkdownRenderer(
         renderNodes.clear()
         rendererState.collectedContent.clear()
         xmlNodeStreams.clear()
+        rendererState.streamParsingCompletedSuccessfully = false
 
         try {
             interceptedStream.nativeMarkdownSplitByBlock(flushIntervalMs = RENDER_INTERVAL_MS).collect { blockGroup ->
@@ -399,7 +434,12 @@ fun StreamMarkdownRenderer(
                     nodes[nodeIndex] = latexNode
                 }
             }
+            rendererState.streamParsingCompletedSuccessfully = true
+        } catch (e: CancellationException) {
+            rendererState.streamParsingCompletedSuccessfully = false
+            throw e
         } catch (e: Exception) {
+            rendererState.streamParsingCompletedSuccessfully = false
             AppLogger.e(TAG, "【流渲染】Markdown流处理异常: ${e.message}", e)
         } finally {
             // 移除时间计算变量和日志
@@ -489,7 +529,13 @@ fun StreamMarkdownRenderer(
     LaunchedEffect(content) {
         // 先检查内容是否与流式渲染收集的内容一致，如果一致则跳过解析
         val collectedContentStr = rendererState.collectedContent.toString()
-        if (collectedContentStr == content && nodes.isNotEmpty()) {
+        val streamParsingCompleted = rendererState.streamParsingCompletedSuccessfully
+        val shouldReuseExistingNodes =
+            collectedContentStr == content &&
+                areRenderNodesSynchronized(nodes, renderNodes, conversionCache) &&
+                streamParsingCompleted
+
+        if (shouldReuseExistingNodes) {
             // 从流式渲染切到静态渲染时，避免沿用已结束的 XML 子流导致子节点渲染异常
             xmlNodeStreams.clear()
             // 内容一致且已有节点，跳过解析

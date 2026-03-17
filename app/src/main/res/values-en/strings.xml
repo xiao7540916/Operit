@@ -45,6 +45,11 @@
     <string name="chat_style_bubble_advanced_options">Advanced options</string>
     <string name="chat_style_bubble_padding_left">Left padding</string>
     <string name="chat_style_bubble_padding_right">Right padding</string>
+    <string name="chat_style_bubble_text_style_title">Bubble text style</string>
+    <string name="chat_style_bubble_user_text_color">User text</string>
+    <string name="chat_style_bubble_ai_text_color">AI text</string>
+    <string name="chat_style_bubble_user_font_title">User font</string>
+    <string name="chat_style_bubble_ai_font_title">AI font</string>
 
     <!-- Floating Window Module -->
     <string name="floating_screen_content">Screen Content</string>
@@ -101,6 +106,8 @@
     <string name="colorpicker_select_cursor_user_bubble">Select command-style user bubble color</string>
     <string name="colorpicker_select_bubble_user_bubble">Select dialog-style user bubble color</string>
     <string name="colorpicker_select_bubble_ai_bubble">Select dialog-style AI bubble color</string>
+    <string name="colorpicker_select_bubble_user_text">Select dialog-style user text color</string>
+    <string name="colorpicker_select_bubble_ai_text">Select dialog-style AI text color</string>
     <string name="colorpicker_select_color">Select color</string>
     <string name="colorpicker_sample_text">Sample text</string>
     <string name="colorpicker_high_contrast">High contrast</string>
@@ -6531,6 +6538,8 @@
     <string name="enhanced_error_with_message">Error: %1$s</string>
     <string name="enhanced_tool_warning">Warning: Tool calls and waiting for user response cannot exist at the same time. Tool calls were processed, but this is extremely dangerous.</string>
     <string name="enhanced_pure_thinking_only_warning">Warning: Please output main content and do not output thinking-only responses.</string>
+    <string name="status_warning_ai_error_summary">The AI made an error</string>
+    <string name="status_warning_ai_error_detail_title">AI Error Reason</string>
     <string name="enhanced_receiving_tool_result">Receiving AI response after tool execution...</string>
     <string name="enhanced_process_tool_result_failed">Failed to process tool execution result: %1$s</string>
     <string name="enhanced_memory_tools_category">Memory and Memory Library Tools</string>

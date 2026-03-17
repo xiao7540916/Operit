@@ -45,7 +45,9 @@ import com.ai.assistance.operit.ui.features.settings.sections.SettingsInfoBanner
 import com.ai.assistance.operit.ui.features.settings.sections.SettingsSectionHeader
 import com.ai.assistance.operit.ui.features.settings.sections.SettingsSwitchRow
 import com.ai.assistance.operit.ui.features.settings.sections.SettingsTextField
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
@@ -88,6 +90,7 @@ fun ModelConfigScreen(
     // 连接测试状态
     var isTestingConnection by remember { mutableStateOf(false) }
     var testResults by remember { mutableStateOf<List<ConnectionTestItem>?>(null) }
+    var connectionTestJob by remember { mutableStateOf<Job?>(null) }
 
     // 保存API设置的函数引用
     var saveApiSettings: (() -> Unit)? by remember { mutableStateOf(null) }
@@ -289,73 +292,83 @@ fun ModelConfigScreen(
 
                             TextButton(
                                 onClick = {
-                                    scope.launch {
-                                        saveApiSettings?.invoke()
-                                        kotlinx.coroutines.delay(300)
+                                    if (isTestingConnection) {
+                                        connectionTestJob?.cancel()
+                                        return@TextButton
+                                    }
 
-                                        isTestingConnection = true
-                                        val results = mutableListOf<ConnectionTestItem>()
+                                    connectionTestJob = scope.launch {
                                         try {
-                                            selectedConfig.value?.let { config ->
-                                                val customHeadersJson =
-                                                    apiPreferences.getCustomHeaders()
-                                                val report =
-                                                    ModelConfigConnectionTester.run(
-                                                        context = context,
-                                                        modelConfigManager = configManager,
-                                                        config = config,
-                                                        customHeadersJson = customHeadersJson
-                                                    )
+                                            isTestingConnection = true
+                                            saveApiSettings?.invoke()
+                                            kotlinx.coroutines.delay(300)
 
-                                                if (report.strictToolCallFallbackUsed) {
-                                                    showNotification(
-                                                        context.getString(
-                                                            R.string.strict_tool_call_required
+                                            val results = mutableListOf<ConnectionTestItem>()
+                                            try {
+                                                selectedConfig.value?.let { config ->
+                                                    val customHeadersJson =
+                                                        apiPreferences.getCustomHeaders()
+                                                    val report =
+                                                        ModelConfigConnectionTester.run(
+                                                            context = context,
+                                                            modelConfigManager = configManager,
+                                                            config = config,
+                                                            customHeadersJson = customHeadersJson
                                                         )
-                                                    )
-                                                }
 
-                                                report.items.forEach { item ->
-                                                    val result =
-                                                        if (item.success) {
-                                                            Result.success(Unit)
-                                                        } else {
-                                                            Result.failure(
-                                                                Exception(item.error ?: "Unknown error")
+                                                    if (report.strictToolCallFallbackUsed) {
+                                                        showNotification(
+                                                            context.getString(
+                                                                R.string.strict_tool_call_required
                                                             )
-                                                        }
+                                                        )
+                                                    }
+
+                                                    report.items.forEach { item ->
+                                                        val result =
+                                                            if (item.success) {
+                                                                Result.success(Unit)
+                                                            } else {
+                                                                Result.failure(
+                                                                    Exception(item.error ?: "Unknown error")
+                                                                )
+                                                            }
+                                                        results.add(
+                                                            ConnectionTestItem(
+                                                                labelResId = item.type.toLabelResId(),
+                                                                result = result
+                                                            )
+                                                        )
+                                                    }
+                                                } ?: run {
                                                     results.add(
                                                         ConnectionTestItem(
-                                                            labelResId = item.type.toLabelResId(),
-                                                            result = result
-                                                        )
-                                                    )
-                                                }
-                                            } ?: run {
-                                                results.add(
-                                                    ConnectionTestItem(
-                                                        R.string.test_item_chat,
-                                                        Result.failure<Unit>(
-                                                            Exception(
-                                                                context.getString(
-                                                                    R.string.no_config_selected
+                                                            R.string.test_item_chat,
+                                                            Result.failure<Unit>(
+                                                                Exception(
+                                                                    context.getString(
+                                                                        R.string.no_config_selected
+                                                                    )
                                                                 )
                                                             )
                                                         )
                                                     )
+                                                }
+                                            } catch (e: CancellationException) {
+                                                throw e
+                                            } catch (e: Exception) {
+                                                results.add(
+                                                    ConnectionTestItem(
+                                                        R.string.test_item_chat,
+                                                        Result.failure<Unit>(e)
+                                                    )
                                                 )
                                             }
-                                        } catch (e: Exception) {
-                                            results.add(
-                                                ConnectionTestItem(
-                                                    R.string.test_item_chat,
-                                                    Result.failure<Unit>(e)
-                                                )
-                                            )
+                                            testResults = results
                                         } finally {
                                             isTestingConnection = false
+                                            connectionTestJob = null
                                         }
-                                        testResults = results
                                     }
                                 },
                                 modifier = Modifier.height(36.dp),
@@ -375,7 +388,10 @@ fun ModelConfigScreen(
                                 }
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    stringResource(R.string.test_connection_desc),
+                                    stringResource(
+                                        if (isTestingConnection) R.string.cancel
+                                        else R.string.test_connection_desc
+                                    ),
                                     fontSize = 14.sp
                                 )
                             }

@@ -51,6 +51,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.ai.assistance.operit.util.markdown.MarkdownProcessorType
 import com.ai.assistance.operit.ui.theme.ProvideAiMarkdownTextLayoutSettings
+import com.ai.assistance.operit.ui.theme.applyFontFamilyToTypography
+import com.ai.assistance.operit.ui.theme.resolveConfiguredFontFamily
 import kotlinx.coroutines.runBlocking
 
 private val ExpandedBubbleLayoutNodeTypes =
@@ -88,6 +90,18 @@ fun BubbleAiMessageComposable(
     val showStatusTags by preferencesManager.showStatusTags.collectAsState(initial = true)
     val avatarShapePref by preferencesManager.avatarShape.collectAsState(initial = UserPreferencesManager.AVATAR_SHAPE_CIRCLE)
     val avatarCornerRadius by preferencesManager.avatarCornerRadius.collectAsState(initial = 8f)
+    val bubbleAiUseCustomFont by
+        preferencesManager.bubbleAiUseCustomFont.collectAsState(initial = false)
+    val bubbleAiFontType by
+        preferencesManager.bubbleAiFontType.collectAsState(
+            initial = UserPreferencesManager.FONT_TYPE_SYSTEM,
+        )
+    val bubbleAiSystemFontName by
+        preferencesManager.bubbleAiSystemFontName.collectAsState(
+            initial = UserPreferencesManager.SYSTEM_FONT_DEFAULT,
+        )
+    val bubbleAiCustomFontPath by
+        preferencesManager.bubbleAiCustomFontPath.collectAsState(initial = null)
     
     // 收集显示偏好设置
     val showModelProvider by displayPreferencesManager.showModelProvider.collectAsState(initial = false)
@@ -192,8 +206,31 @@ fun BubbleAiMessageComposable(
     }
     val shouldUseExpandedBubbleLayout =
         rendererState.renderNodes.any { node -> node.type in ExpandedBubbleLayoutNodeTypes }
+    val baseTypography = MaterialTheme.typography
+    val bubbleTypography =
+        remember(
+            context,
+            bubbleAiUseCustomFont,
+            bubbleAiFontType,
+            bubbleAiSystemFontName,
+            bubbleAiCustomFontPath,
+            baseTypography,
+        ) {
+            applyFontFamilyToTypography(
+                baseTypography = baseTypography,
+                fontFamily =
+                    resolveConfiguredFontFamily(
+                        context = context,
+                        useCustomFont = bubbleAiUseCustomFont,
+                        fontType = bubbleAiFontType,
+                        systemFontName = bubbleAiSystemFontName,
+                        customFontPath = bubbleAiCustomFontPath,
+                    ),
+            )
+        }
 
-    ProvideAiMarkdownTextLayoutSettings {
+    MaterialTheme(typography = bubbleTypography) {
+        ProvideAiMarkdownTextLayoutSettings {
         if (bubbleWideLayoutEnabled) {
         val headerVisible = bubbleShowAvatar || roleNameText.isNotEmpty() || metadataText.isNotEmpty()
         val avatarModifier = Modifier
@@ -542,6 +579,7 @@ fun BubbleAiMessageComposable(
                     }
                 }
             }
+        }
         }
     }
     }

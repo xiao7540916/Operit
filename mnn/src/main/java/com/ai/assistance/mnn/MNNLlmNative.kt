@@ -88,15 +88,55 @@ object MNNLlmNative {
     ): Boolean
 
     @JvmStatic
+    external fun nativeGenerateStreamStructured(
+        llmPtr: Long,
+        messagesJson: String,
+        toolsJson: String?,
+        maxTokens: Int,
+        callback: GenerationCallback
+    ): Boolean
+
+    @JvmStatic
     external fun nativeApplyChatTemplateWithHistory(
         llmPtr: Long,
         history: List<Pair<String, String>>
     ): String?
+
+    @JvmStatic
+    external fun nativeApplyChatTemplateWithStructuredMessages(
+        llmPtr: Long,
+        messagesJson: String,
+        toolsJson: String?
+    ): String?
+
     @JvmStatic
     external fun nativeCountTokensWithHistory(
         llmPtr: Long,
         history: List<Pair<String, String>>
     ): Int
+
+    @JvmStatic
+    external fun nativeCountTokensWithStructuredMessages(
+        llmPtr: Long,
+        messagesJson: String,
+        toolsJson: String?
+    ): Int
+
+    /**
+     * 导出当前生效的 LLM 配置。
+     * @param llmPtr LLM 指针
+     * @return JSON 字符串，失败返回 null
+     */
+    @JvmStatic
+    external fun nativeDumpConfig(llmPtr: Long): String?
+
+    /**
+     * 导出最近一次推理上下文信息。
+     * @param llmPtr LLM 指针
+     * @return JSON 字符串，失败返回 null
+     */
+    @JvmStatic
+    external fun nativeGetContextInfo(llmPtr: Long): String?
     
     /**
      * 应用聊天模板
@@ -122,6 +162,27 @@ object MNNLlmNative {
      */
     @JvmStatic
     external fun nativeSetConfig(llmPtr: Long, configJson: String): Boolean
+
+    /**
+     * 注册或清除音频数据回调。
+     * @param llmPtr LLM 指针
+     * @param callback 为 null 时表示清除回调
+     * @return 是否设置成功
+     */
+    @JvmStatic
+    external fun nativeSetAudioDataCallback(
+        llmPtr: Long,
+        callback: AudioDataCallback?
+    ): Boolean
+
+    /**
+     * 触发语音波形生成。
+     * 仅对支持语音输出的模型有效。
+     * @param llmPtr LLM 指针
+     * @return 是否执行成功
+     */
+    @JvmStatic
+    external fun nativeGenerateWavform(llmPtr: Long): Boolean
     
     /**
      * 取消当前的生成任务
@@ -140,6 +201,14 @@ object MNNLlmNative {
          * @return true 继续生成，false 停止生成
          */
         fun onToken(token: String): Boolean
+    }
+
+    /**
+     * 当模型输出音频波形时触发。
+     * 返回 true 表示继续，false 表示停止音频输出。
+     */
+    interface AudioDataCallback {
+        fun onAudioData(audioData: FloatArray, isLastChunk: Boolean): Boolean
     }
 }
 

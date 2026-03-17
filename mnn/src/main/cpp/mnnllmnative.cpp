@@ -14,11 +14,15 @@
 #include <sstream>
 #include <map>
 #include <mutex>
+#include <rapidjson/document.h>
 
 // MNN LLM headers
 #include <MNN/expr/Expr.hpp>
 #include <MNN/expr/Module.hpp>
 #include <llm/llm.hpp>
+#ifdef LLM_USE_MINJA
+#include "minja/chat_template.hpp"
+#endif
 
 #define TAG "MNNLlmNative"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, TAG, __VA_ARGS__)
@@ -56,6 +60,97 @@ void clearCancelFlag(jlong llmPtr) {
 }
 
 // =======================
+// Audio Callback Support
+// =======================
+
+struct AudioCallbackHolder {
+    JavaVM* jvm = nullptr;
+    jobject callbackGlobalRef = nullptr;
+    jmethodID onAudioDataMethod = nullptr;
+};
+
+static std::mutex gAudioCallbackMutex;
+static std::map<jlong, AudioCallbackHolder> gAudioCallbacks;
+
+void clearAudioCallback(JNIEnv* env, jlong llmPtr) {
+    AudioCallbackHolder holder;
+    bool hasHolder = false;
+    {
+        std::lock_guard<std::mutex> lock(gAudioCallbackMutex);
+        auto it = gAudioCallbacks.find(llmPtr);
+        if (it != gAudioCallbacks.end()) {
+            holder = it->second;
+            gAudioCallbacks.erase(it);
+            hasHolder = true;
+        }
+    }
+
+    if (hasHolder && env != nullptr && holder.callbackGlobalRef != nullptr) {
+        env->DeleteGlobalRef(holder.callbackGlobalRef);
+    }
+}
+
+bool invokeAudioCallback(jlong llmPtr, const float* data, size_t size, bool isLastChunk) {
+    AudioCallbackHolder holder;
+    {
+        std::lock_guard<std::mutex> lock(gAudioCallbackMutex);
+        auto it = gAudioCallbacks.find(llmPtr);
+        if (it == gAudioCallbacks.end()) {
+            return false;
+        }
+        holder = it->second;
+    }
+
+    if (holder.jvm == nullptr || holder.callbackGlobalRef == nullptr || holder.onAudioDataMethod == nullptr) {
+        return false;
+    }
+
+    JNIEnv* env = nullptr;
+    bool needDetach = false;
+    int getEnvResult = holder.jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+    if (getEnvResult == JNI_EDETACHED) {
+        if (holder.jvm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
+            LOGE("Failed to attach thread for audio callback");
+            return false;
+        }
+        needDetach = true;
+    } else if (getEnvResult != JNI_OK || env == nullptr) {
+        LOGE("Failed to get JNIEnv for audio callback: %d", getEnvResult);
+        return false;
+    }
+
+    jfloatArray audioDataArray = env->NewFloatArray(static_cast<jsize>(size));
+    if (audioDataArray == nullptr) {
+        if (needDetach) {
+            holder.jvm->DetachCurrentThread();
+        }
+        return false;
+    }
+    env->SetFloatArrayRegion(audioDataArray, 0, static_cast<jsize>(size), data);
+
+    jboolean shouldContinue = env->CallBooleanMethod(
+        holder.callbackGlobalRef,
+        holder.onAudioDataMethod,
+        audioDataArray,
+        isLastChunk ? JNI_TRUE : JNI_FALSE
+    );
+
+    env->DeleteLocalRef(audioDataArray);
+
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        shouldContinue = JNI_FALSE;
+    }
+
+    if (needDetach) {
+        holder.jvm->DetachCurrentThread();
+    }
+
+    return shouldContinue == JNI_TRUE;
+}
+
+// =======================
 // Helper Functions
 // =======================
 
@@ -69,6 +164,231 @@ std::string jstringToString(JNIEnv* env, jstring jstr) {
 
 jstring stringToJstring(JNIEnv* env, const std::string& str) {
     return env->NewStringUTF(str.c_str());
+}
+
+ChatMessages parseChatHistory(JNIEnv* env, jobject jhistory) {
+    ChatMessages history;
+    if (jhistory == nullptr) {
+        return history;
+    }
+
+    jclass listClass = env->FindClass("java/util/List");
+    jmethodID sizeMethod = env->GetMethodID(listClass, "size", "()I");
+    jmethodID getMethod = env->GetMethodID(listClass, "get", "(I)Ljava/lang/Object;");
+    jint listSize = env->CallIntMethod(jhistory, sizeMethod);
+
+    jclass pairClass = env->FindClass("kotlin/Pair");
+    jmethodID getFirstMethod = env->GetMethodID(pairClass, "getFirst", "()Ljava/lang/Object;");
+    jmethodID getSecondMethod = env->GetMethodID(pairClass, "getSecond", "()Ljava/lang/Object;");
+
+    for (jint i = 0; i < listSize; i++) {
+        jobject pairObj = env->CallObjectMethod(jhistory, getMethod, i);
+        if (pairObj == nullptr) {
+            continue;
+        }
+
+        jobject roleObj = env->CallObjectMethod(pairObj, getFirstMethod);
+        jobject contentObj = env->CallObjectMethod(pairObj, getSecondMethod);
+
+        if (roleObj != nullptr && contentObj != nullptr) {
+            std::string role = jstringToString(env, (jstring)roleObj);
+            std::string content = jstringToString(env, (jstring)contentObj);
+            history.emplace_back(role, content);
+        }
+
+        if (roleObj) env->DeleteLocalRef(roleObj);
+        if (contentObj) env->DeleteLocalRef(contentObj);
+        env->DeleteLocalRef(pairObj);
+    }
+
+    env->DeleteLocalRef(listClass);
+    env->DeleteLocalRef(pairClass);
+    return history;
+}
+
+#ifdef LLM_USE_MINJA
+std::string readTemplateToken(const rapidjson::Value& value) {
+    if (value.IsString()) {
+        return value.GetString();
+    }
+    if (value.IsObject() && value.HasMember("content") && value["content"].IsString()) {
+        return value["content"].GetString();
+    }
+    return "";
+}
+
+bool parseJsonArrayDocument(const std::string& json, rapidjson::Document& document) {
+    document.Parse(json.c_str());
+    return !document.HasParseError() && document.IsArray();
+}
+
+std::string applyStructuredChatTemplate(Llm* llm, const std::string& messagesJson, const std::string& toolsJson) {
+    if (llm == nullptr || messagesJson.empty()) {
+        return "";
+    }
+
+    rapidjson::Document messagesDoc;
+    if (!parseJsonArrayDocument(messagesJson, messagesDoc)) {
+        LOGE("Invalid structured messages json");
+        return "";
+    }
+
+    rapidjson::Document configDoc;
+    std::string configJson = llm->dump_config();
+    configDoc.Parse(configJson.c_str());
+    if (configDoc.HasParseError() || !configDoc.IsObject()) {
+        LOGE("Invalid llm config json");
+        return "";
+    }
+
+    if (!configDoc.HasMember("jinja") || !configDoc["jinja"].IsObject()) {
+        LOGE("LLM config has no jinja section");
+        return "";
+    }
+
+    const auto& jinja = configDoc["jinja"];
+    if (!jinja.HasMember("chat_template")) {
+        LOGE("LLM config has no jinja.chat_template");
+        return "";
+    }
+
+    std::string chatTemplate = readTemplateToken(jinja["chat_template"]);
+    if (chatTemplate.empty()) {
+        LOGE("LLM config jinja.chat_template is empty");
+        return "";
+    }
+
+    std::string bosToken;
+    std::string eosToken;
+    if (jinja.HasMember("bos")) {
+        bosToken = readTemplateToken(jinja["bos"]);
+    }
+    if (jinja.HasMember("eos")) {
+        eosToken = readTemplateToken(jinja["eos"]);
+    }
+
+    minja::chat_template tmpl(chatTemplate, bosToken, eosToken);
+    minja::chat_template_inputs inputs;
+    inputs.messages.CopyFrom(messagesDoc, inputs.messages.GetAllocator());
+    inputs.add_generation_prompt = true;
+
+    if (!toolsJson.empty()) {
+        rapidjson::Document toolsDoc;
+        if (!parseJsonArrayDocument(toolsJson, toolsDoc)) {
+            LOGE("Invalid structured tools json");
+            return "";
+        }
+        inputs.tools.CopyFrom(toolsDoc, inputs.tools.GetAllocator());
+    } else {
+        inputs.tools.SetNull();
+    }
+
+    if (jinja.HasMember("context") && jinja["context"].IsObject()) {
+        inputs.extra_context.CopyFrom(jinja["context"], inputs.extra_context.GetAllocator());
+    } else {
+        inputs.extra_context.SetNull();
+    }
+
+    return tmpl.apply(inputs);
+}
+#else
+std::string applyStructuredChatTemplate(Llm* llm, const std::string& messagesJson, const std::string& toolsJson) {
+    LOGE("Structured chat template requires LLM_USE_MINJA");
+    return "";
+}
+#endif
+
+std::string jsonEscape(const std::string& input) {
+    std::string output;
+    output.reserve(input.size() + 16);
+    for (char ch : input) {
+        switch (ch) {
+            case '\\':
+                output += "\\\\";
+                break;
+            case '"':
+                output += "\\\"";
+                break;
+            case '\b':
+                output += "\\b";
+                break;
+            case '\f':
+                output += "\\f";
+                break;
+            case '\n':
+                output += "\\n";
+                break;
+            case '\r':
+                output += "\\r";
+                break;
+            case '\t':
+                output += "\\t";
+                break;
+            default:
+                output += ch;
+                break;
+        }
+    }
+    return output;
+}
+
+void appendIntVectorJson(std::ostringstream& oss, const std::vector<int>& values) {
+    oss << "[";
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (i > 0) {
+            oss << ",";
+        }
+        oss << values[i];
+    }
+    oss << "]";
+}
+
+const char* llmStatusToString(LlmStatus status) {
+    switch (status) {
+        case LlmStatus::RUNNING:
+            return "RUNNING";
+        case LlmStatus::NORMAL_FINISHED:
+            return "NORMAL_FINISHED";
+        case LlmStatus::MAX_TOKENS_FINISHED:
+            return "MAX_TOKENS_FINISHED";
+        case LlmStatus::USER_CANCEL:
+            return "USER_CANCEL";
+        case LlmStatus::INTERNAL_ERROR:
+            return "INTERNAL_ERROR";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+std::string contextToJson(const LlmContext* context) {
+    if (context == nullptr) {
+        return "";
+    }
+
+    std::ostringstream oss;
+    oss << "{";
+    oss << "\"prompt_len\":" << context->prompt_len << ",";
+    oss << "\"gen_seq_len\":" << context->gen_seq_len << ",";
+    oss << "\"all_seq_len\":" << context->all_seq_len << ",";
+    oss << "\"load_us\":" << context->load_us << ",";
+    oss << "\"vision_us\":" << context->vision_us << ",";
+    oss << "\"audio_us\":" << context->audio_us << ",";
+    oss << "\"prefill_us\":" << context->prefill_us << ",";
+    oss << "\"decode_us\":" << context->decode_us << ",";
+    oss << "\"sample_us\":" << context->sample_us << ",";
+    oss << "\"pixels_mp\":" << context->pixels_mp << ",";
+    oss << "\"audio_input_s\":" << context->audio_input_s << ",";
+    oss << "\"current_token\":" << context->current_token << ",";
+    oss << "\"status_code\":" << static_cast<int>(context->status) << ",";
+    oss << "\"status\":\"" << llmStatusToString(context->status) << "\",";
+    oss << "\"generate_str\":\"" << jsonEscape(context->generate_str) << "\",";
+    oss << "\"history_tokens\":";
+    appendIntVectorJson(oss, context->history_tokens);
+    oss << ",";
+    oss << "\"output_tokens\":";
+    appendIntVectorJson(oss, context->output_tokens);
+    oss << "}";
+    return oss.str();
 }
 
 // =======================
@@ -155,6 +475,8 @@ Java_com_ai_assistance_mnn_MNNLlmNative_nativeReleaseLlm(
     LOGD("Releasing LLM at %p", llm);
     
     try {
+        clearAudioCallback(env, llmPtr);
+        clearCancelFlag(llmPtr);
         Llm::destroy(llm);
         LOGI("LLM released successfully");
     } catch (const std::exception& e) {
@@ -230,15 +552,6 @@ Java_com_ai_assistance_mnn_MNNLlmNative_nativeGenerate(
     std::string prompt = jstringToString(env, jprompt);
     
     try {
-        // 获取 callback 方法
-        jclass callbackClass = env->GetObjectClass(callback);
-        jmethodID onTokenMethod = env->GetMethodID(callbackClass, "onToken", "(Ljava/lang/String;)Z");
-        
-        if (onTokenMethod == nullptr) {
-            LOGE("Failed to find onToken method in callback");
-            return nullptr;
-        }
-        
         // 编码输入
         std::vector<int> inputTokens = llm->tokenizer_encode(prompt);
         LOGD("Input tokens: %zu", inputTokens.size());
@@ -272,96 +585,52 @@ struct StreamContext {
     jlong llmPtr = 0;  // 添加 llm 指针用于检查取消标志
 };
 
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_ai_assistance_mnn_MNNLlmNative_nativeGenerateStream(
-    JNIEnv* env, jclass clazz,
+static jboolean runStreamGenerationWithInputIds(
+    JNIEnv* env,
     jlong llmPtr,
-    jobject jhistory,
+    const std::vector<int>& inputTokens,
     jint maxTokens,
     jobject callback) {
-    
+
     if (llmPtr == 0) return JNI_FALSE;
-    
+
     Llm* llm = reinterpret_cast<Llm*>(llmPtr);
-    
-    // 解析历史记录 List<Pair<String, String>>
-    std::vector<std::pair<std::string, std::string>> history;
-    
-    jclass listClass = env->FindClass("java/util/List");
-    jmethodID sizeMethod = env->GetMethodID(listClass, "size", "()I");
-    jmethodID getMethod = env->GetMethodID(listClass, "get", "(I)Ljava/lang/Object;");
-    jint listSize = env->CallIntMethod(jhistory, sizeMethod);
-    
-    jclass pairClass = env->FindClass("kotlin/Pair");
-    jmethodID getFirstMethod = env->GetMethodID(pairClass, "getFirst", "()Ljava/lang/Object;");
-    jmethodID getSecondMethod = env->GetMethodID(pairClass, "getSecond", "()Ljava/lang/Object;");
-    
-    for (jint i = 0; i < listSize; i++) {
-        jobject pairObj = env->CallObjectMethod(jhistory, getMethod, i);
-        if (pairObj == nullptr) continue;
-        
-        jobject roleObj = env->CallObjectMethod(pairObj, getFirstMethod);
-        jobject contentObj = env->CallObjectMethod(pairObj, getSecondMethod);
-        
-        if (roleObj != nullptr && contentObj != nullptr) {
-            std::string role = jstringToString(env, (jstring)roleObj);
-            std::string content = jstringToString(env, (jstring)contentObj);
-            history.emplace_back(role, content);
-        }
-        
-        if (roleObj) env->DeleteLocalRef(roleObj);
-        if (contentObj) env->DeleteLocalRef(contentObj);
-        env->DeleteLocalRef(pairObj);
-    }
-    
-    env->DeleteLocalRef(listClass);
-    env->DeleteLocalRef(pairClass);
-    
-    LOGD("Starting stream generation with %zu history messages", history.size());
-    
     jobject callbackGlobalRef = nullptr;
-    
+
     try {
-        // 获取 JavaVM
         JavaVM* jvm = nullptr;
         if (env->GetJavaVM(&jvm) != JNI_OK || jvm == nullptr) {
             LOGE("Failed to get JavaVM");
             return JNI_FALSE;
         }
-        
-        // 获取 callback 方法
+
         jclass callbackClass = env->GetObjectClass(callback);
         jmethodID onTokenMethod = env->GetMethodID(callbackClass, "onToken", "(Ljava/lang/String;)Z");
         env->DeleteLocalRef(callbackClass);
-        
+
         if (onTokenMethod == nullptr) {
             LOGE("Failed to find onToken method in callback");
             return JNI_FALSE;
         }
-        
-        // 创建全局引用，可以跨线程使用
+
         callbackGlobalRef = env->NewGlobalRef(callback);
         if (callbackGlobalRef == nullptr) {
             LOGE("Failed to create global reference for callback");
             return JNI_FALSE;
         }
-        
-        // 准备流式输出上下文
+
         StreamContext context;
         context.jvm = jvm;
         context.callbackGlobalRef = callbackGlobalRef;
         context.onTokenMethod = onTokenMethod;
         context.llmPtr = llmPtr;
-        
-        // 清除之前的取消标志
+
         setCancelFlag(llmPtr, false);
-        
-        // 创建自定义 ostream 来捕获输出（仿照 MNN 官方 LlmStreamBuffer 实现）
+
         class CallbackStream : public std::streambuf {
         public:
             CallbackStream(StreamContext* ctx) : mContext(ctx) {}
-            
-            // 公开方法，用于最后刷新缓冲区
+
             void flushToCallback() {
                 if (mContext->buffer.empty() || mContext->shouldStop) {
                     return;
@@ -369,24 +638,22 @@ Java_com_ai_assistance_mnn_MNNLlmNative_nativeGenerateStream(
 
                 const std::string endMarker = "<eop>";
                 auto pos = mContext->buffer.find(endMarker);
+                std::string payload = mContext->buffer;
                 if (pos != std::string::npos) {
-                    std::string tail = mContext->buffer.substr(0, pos);
-                    mContext->buffer.clear();
+                    payload = mContext->buffer.substr(0, pos);
                     mContext->shouldStop = true;
-                    if (!tail.empty()) {
-                        mContext->buffer = std::move(tail);
-                    } else {
-                        return;
-                    }
                 }
-                
-                // 获取当前线程的 JNIEnv
+
+                if (payload.empty()) {
+                    mContext->buffer.clear();
+                    return;
+                }
+
                 bool needDetach = false;
                 JNIEnv* env = nullptr;
-                
+
                 int getEnvResult = mContext->jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
                 if (getEnvResult == JNI_EDETACHED) {
-                    // 当前线程未附加到 JVM，需要附加
                     if (mContext->jvm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
                         __android_log_print(ANDROID_LOG_ERROR, TAG, "Failed to attach thread");
                         return;
@@ -396,10 +663,9 @@ Java_com_ai_assistance_mnn_MNNLlmNative_nativeGenerateStream(
                     __android_log_print(ANDROID_LOG_ERROR, TAG, "Failed to get JNIEnv: %d", getEnvResult);
                     return;
                 }
-                
+
                 try {
-                    // 创建 Java 字符串并调用 callback
-                    jstring jtoken = env->NewStringUTF(mContext->buffer.c_str());
+                    jstring jtoken = env->NewStringUTF(payload.c_str());
                     if (jtoken != nullptr) {
                         jboolean shouldContinue = env->CallBooleanMethod(
                             mContext->callbackGlobalRef,
@@ -407,8 +673,7 @@ Java_com_ai_assistance_mnn_MNNLlmNative_nativeGenerateStream(
                             jtoken
                         );
                         env->DeleteLocalRef(jtoken);
-                        
-                        // 检查是否有 JNI 异常
+
                         if (env->ExceptionCheck()) {
                             env->ExceptionDescribe();
                             env->ExceptionClear();
@@ -424,19 +689,16 @@ Java_com_ai_assistance_mnn_MNNLlmNative_nativeGenerateStream(
                     __android_log_print(ANDROID_LOG_ERROR, TAG, "Exception in callback");
                     mContext->shouldStop = true;
                 }
-                
-                // 如果需要，分离线程
+
                 if (needDetach) {
                     mContext->jvm->DetachCurrentThread();
                 }
-                
+
                 mContext->buffer.clear();
             }
-            
+
         protected:
-            // 只重写 xsputn，不重写 overflow
             virtual std::streamsize xsputn(const char* s, std::streamsize n) override {
-                // 检查取消标志或 shouldStop
                 if (mContext->shouldStop || checkCancelFlag(mContext->llmPtr) || n <= 0) {
                     if (checkCancelFlag(mContext->llmPtr)) {
                         __android_log_print(ANDROID_LOG_DEBUG, TAG, "Generation cancelled by user");
@@ -444,51 +706,69 @@ Java_com_ai_assistance_mnn_MNNLlmNative_nativeGenerateStream(
                     }
                     return 0;
                 }
-                
-                // 累积字符到缓冲区
-                mContext->buffer.append(s, n);
-                
-                // 检查是否应该刷新缓冲区
-                // 策略：累积到一定大小或遇到分隔符
-                bool shouldFlush = false;
-                if (mContext->buffer.size() >= 16) {  // 增加阈值以减少 JNI 调用频率
-                    shouldFlush = true;
-                } else {
-                    // 检查最后几个字符是否包含分隔符（ASCII 字符）
-                    for (std::streamsize i = 0; i < n && !shouldFlush; ++i) {
-                        char ch = s[i];
-                        if (ch == '\n' || ch == '.' || ch == '!' || ch == '?') {
-                            shouldFlush = true;
-                        }
-                    }
-                    // 检查中文标点（UTF-8 多字节序列）
-                    if (!shouldFlush && mContext->buffer.size() >= 3) {
-                        const char* bufEnd = mContext->buffer.c_str() + mContext->buffer.size();
-                        // UTF-8 中文句号：E3 80 82 (。)
-                        // UTF-8 中文感叹号：EF BC 81 (！)
-                        // UTF-8 中文问号：EF BC 9F (？)
-                        if (mContext->buffer.size() >= 3) {
-                            unsigned char c1 = static_cast<unsigned char>(*(bufEnd - 3));
-                            unsigned char c2 = static_cast<unsigned char>(*(bufEnd - 2));
-                            unsigned char c3 = static_cast<unsigned char>(*(bufEnd - 1));
-                            if ((c1 == 0xE3 && c2 == 0x80 && c3 == 0x82) ||  // 。
-                                (c1 == 0xEF && c2 == 0xBC && c3 == 0x81) ||  // ！
-                                (c1 == 0xEF && c2 == 0xBC && c3 == 0x9F)) {  // ？
-                                shouldFlush = true;
-                            }
-                        }
-                    }
+
+                std::string completeChars = extractCompleteUtf8(s, static_cast<size_t>(n));
+                if (completeChars.empty()) {
+                    return n;
                 }
+
+                mContext->buffer.append(completeChars);
                 
-                if (shouldFlush) {
+                if (shouldFlush(completeChars)) {
                     flushToCallback();
                 }
-                
+
                 return n;
             }
-            
+
         private:
+            static int utf8CharLength(unsigned char byte) {
+                if ((byte & 0x80) == 0) return 1;
+                if ((byte & 0xE0) == 0xC0) return 2;
+                if ((byte & 0xF0) == 0xE0) return 3;
+                if ((byte & 0xF8) == 0xF0) return 4;
+                return 0;
+            }
+
+            static bool containsFlushDelimiter(const std::string& text) {
+                return text.find('\n') != std::string::npos ||
+                       text.find('.') != std::string::npos ||
+                       text.find('!') != std::string::npos ||
+                       text.find('?') != std::string::npos ||
+                       text.find("\xE3\x80\x82") != std::string::npos ||
+                       text.find("\xEF\xBC\x81") != std::string::npos ||
+                       text.find("\xEF\xBC\x9F") != std::string::npos;
+            }
+
+            std::string extractCompleteUtf8(const char* s, size_t n) {
+                mPendingUtf8Bytes.append(s, n);
+
+                size_t i = 0;
+                std::string completeChars;
+                while (i < mPendingUtf8Bytes.size()) {
+                    int length = utf8CharLength(static_cast<unsigned char>(mPendingUtf8Bytes[i]));
+                    if (length == 0 || i + static_cast<size_t>(length) > mPendingUtf8Bytes.size()) {
+                        break;
+                    }
+                    completeChars.append(mPendingUtf8Bytes, i, static_cast<size_t>(length));
+                    i += static_cast<size_t>(length);
+                }
+
+                if (i > 0) {
+                    mPendingUtf8Bytes.erase(0, i);
+                }
+
+                return completeChars;
+            }
+
+            bool shouldFlush(const std::string& completeChars) const {
+                return mContext->buffer.find("<eop>") != std::string::npos ||
+                       mContext->buffer.size() >= 16 ||
+                       containsFlushDelimiter(completeChars);
+            }
+
             StreamContext* mContext;
+            std::string mPendingUtf8Bytes;
         };
         
         CallbackStream callbackBuf(&context);
@@ -503,20 +783,18 @@ Java_com_ai_assistance_mnn_MNNLlmNative_nativeGenerateStream(
 
         int currentSize = 0;
 
-        llm->response(history, &outputStream, "<eop>", 1);
+        llm->response(inputTokens, &outputStream, "<eop>", 1);
         currentSize++;
 
         while (!context.shouldStop && currentSize < maxNewTokens && !checkCancelFlag(llmPtr)) {
             llm->generate(1);
             currentSize++;
         }
-        
-        // 刷新剩余缓冲区（使用 callbackBuf 的方法以确保线程安全）
+
         if (!context.buffer.empty() && !context.shouldStop) {
             callbackBuf.flushToCallback();
         }
-        
-        // 清理全局引用和取消标志
+
         if (callbackGlobalRef != nullptr) {
             env->DeleteGlobalRef(callbackGlobalRef);
         }
@@ -524,7 +802,7 @@ Java_com_ai_assistance_mnn_MNNLlmNative_nativeGenerateStream(
         
         LOGI("Stream generation completed");
         return JNI_TRUE;
-        
+
     } catch (const std::exception& e) {
         LOGE("Exception in generateStream: %s", e.what());
         if (callbackGlobalRef != nullptr) {
@@ -538,6 +816,63 @@ Java_com_ai_assistance_mnn_MNNLlmNative_nativeGenerateStream(
             env->DeleteGlobalRef(callbackGlobalRef);
         }
         clearCancelFlag(llmPtr);
+        return JNI_FALSE;
+    }
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_ai_assistance_mnn_MNNLlmNative_nativeGenerateStream(
+    JNIEnv* env, jclass clazz,
+    jlong llmPtr,
+    jobject jhistory,
+    jint maxTokens,
+    jobject callback) {
+
+    if (llmPtr == 0) return JNI_FALSE;
+
+    Llm* llm = reinterpret_cast<Llm*>(llmPtr);
+    ChatMessages history = parseChatHistory(env, jhistory);
+    LOGD("Starting stream generation with %zu history messages", history.size());
+
+    try {
+        std::string prompt = llm->apply_chat_template(history);
+        if (prompt.empty()) {
+            LOGE("Failed to apply chat template for history");
+            return JNI_FALSE;
+        }
+        std::vector<int> inputTokens = llm->tokenizer_encode(prompt);
+        return runStreamGenerationWithInputIds(env, llmPtr, inputTokens, maxTokens, callback);
+    } catch (const std::exception& e) {
+        LOGE("Exception preparing stream generation: %s", e.what());
+        return JNI_FALSE;
+    }
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_ai_assistance_mnn_MNNLlmNative_nativeGenerateStreamStructured(
+    JNIEnv* env, jclass clazz,
+    jlong llmPtr,
+    jstring jmessagesJson,
+    jstring jtoolsJson,
+    jint maxTokens,
+    jobject callback) {
+
+    if (llmPtr == 0) return JNI_FALSE;
+
+    Llm* llm = reinterpret_cast<Llm*>(llmPtr);
+    std::string messagesJson = jstringToString(env, jmessagesJson);
+    std::string toolsJson = jstringToString(env, jtoolsJson);
+
+    try {
+        std::string prompt = applyStructuredChatTemplate(llm, messagesJson, toolsJson);
+        if (prompt.empty()) {
+            LOGE("Failed to apply structured chat template");
+            return JNI_FALSE;
+        }
+        std::vector<int> inputTokens = llm->tokenizer_encode(prompt);
+        return runStreamGenerationWithInputIds(env, llmPtr, inputTokens, maxTokens, callback);
+    } catch (const std::exception& e) {
+        LOGE("Exception preparing structured stream generation: %s", e.what());
         return JNI_FALSE;
     }
 }
@@ -590,44 +925,38 @@ Java_com_ai_assistance_mnn_MNNLlmNative_nativeApplyChatTemplateWithHistory(
     if (llmPtr == 0) return nullptr;
 
     Llm* llm = reinterpret_cast<Llm*>(llmPtr);
-
-    std::vector<std::pair<std::string, std::string>> history;
-
-    jclass listClass = env->FindClass("java/util/List");
-    jmethodID sizeMethod = env->GetMethodID(listClass, "size", "()I");
-    jmethodID getMethod = env->GetMethodID(listClass, "get", "(I)Ljava/lang/Object;");
-    jint listSize = env->CallIntMethod(jhistory, sizeMethod);
-
-    jclass pairClass = env->FindClass("kotlin/Pair");
-    jmethodID getFirstMethod = env->GetMethodID(pairClass, "getFirst", "()Ljava/lang/Object;");
-    jmethodID getSecondMethod = env->GetMethodID(pairClass, "getSecond", "()Ljava/lang/Object;");
-
-    for (jint i = 0; i < listSize; i++) {
-        jobject pairObj = env->CallObjectMethod(jhistory, getMethod, i);
-        if (pairObj == nullptr) continue;
-
-        jobject roleObj = env->CallObjectMethod(pairObj, getFirstMethod);
-        jobject contentObj = env->CallObjectMethod(pairObj, getSecondMethod);
-
-        if (roleObj != nullptr && contentObj != nullptr) {
-            std::string role = jstringToString(env, (jstring)roleObj);
-            std::string content = jstringToString(env, (jstring)contentObj);
-            history.emplace_back(role, content);
-        }
-
-        if (roleObj) env->DeleteLocalRef(roleObj);
-        if (contentObj) env->DeleteLocalRef(contentObj);
-        env->DeleteLocalRef(pairObj);
-    }
-
-    env->DeleteLocalRef(listClass);
-    env->DeleteLocalRef(pairClass);
+    ChatMessages history = parseChatHistory(env, jhistory);
 
     try {
         std::string templated = llm->apply_chat_template(history);
         return stringToJstring(env, templated);
     } catch (const std::exception& e) {
         LOGE("Exception in applyChatTemplateWithHistory: %s", e.what());
+        return nullptr;
+    }
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_ai_assistance_mnn_MNNLlmNative_nativeApplyChatTemplateWithStructuredMessages(
+    JNIEnv* env, jclass clazz,
+    jlong llmPtr,
+    jstring jmessagesJson,
+    jstring jtoolsJson) {
+
+    if (llmPtr == 0) return nullptr;
+
+    Llm* llm = reinterpret_cast<Llm*>(llmPtr);
+    std::string messagesJson = jstringToString(env, jmessagesJson);
+    std::string toolsJson = jstringToString(env, jtoolsJson);
+
+    try {
+        std::string templated = applyStructuredChatTemplate(llm, messagesJson, toolsJson);
+        if (templated.empty()) {
+            return nullptr;
+        }
+        return stringToJstring(env, templated);
+    } catch (const std::exception& e) {
+        LOGE("Exception in applyChatTemplateWithStructuredMessages: %s", e.what());
         return nullptr;
     }
 }
@@ -641,38 +970,7 @@ Java_com_ai_assistance_mnn_MNNLlmNative_nativeCountTokensWithHistory(
     if (llmPtr == 0) return 0;
 
     Llm* llm = reinterpret_cast<Llm*>(llmPtr);
-
-    std::vector<std::pair<std::string, std::string>> history;
-
-    jclass listClass = env->FindClass("java/util/List");
-    jmethodID sizeMethod = env->GetMethodID(listClass, "size", "()I");
-    jmethodID getMethod = env->GetMethodID(listClass, "get", "(I)Ljava/lang/Object;");
-    jint listSize = env->CallIntMethod(jhistory, sizeMethod);
-
-    jclass pairClass = env->FindClass("kotlin/Pair");
-    jmethodID getFirstMethod = env->GetMethodID(pairClass, "getFirst", "()Ljava/lang/Object;");
-    jmethodID getSecondMethod = env->GetMethodID(pairClass, "getSecond", "()Ljava/lang/Object;");
-
-    for (jint i = 0; i < listSize; i++) {
-        jobject pairObj = env->CallObjectMethod(jhistory, getMethod, i);
-        if (pairObj == nullptr) continue;
-
-        jobject roleObj = env->CallObjectMethod(pairObj, getFirstMethod);
-        jobject contentObj = env->CallObjectMethod(pairObj, getSecondMethod);
-
-        if (roleObj != nullptr && contentObj != nullptr) {
-            std::string role = jstringToString(env, (jstring)roleObj);
-            std::string content = jstringToString(env, (jstring)contentObj);
-            history.emplace_back(role, content);
-        }
-
-        if (roleObj) env->DeleteLocalRef(roleObj);
-        if (contentObj) env->DeleteLocalRef(contentObj);
-        env->DeleteLocalRef(pairObj);
-    }
-
-    env->DeleteLocalRef(listClass);
-    env->DeleteLocalRef(pairClass);
+    ChatMessages history = parseChatHistory(env, jhistory);
 
     try {
         std::string templated = llm->apply_chat_template(history);
@@ -681,6 +979,72 @@ Java_com_ai_assistance_mnn_MNNLlmNative_nativeCountTokensWithHistory(
     } catch (const std::exception& e) {
         LOGE("Exception in countTokensWithHistory: %s", e.what());
         return 0;
+    }
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_ai_assistance_mnn_MNNLlmNative_nativeCountTokensWithStructuredMessages(
+    JNIEnv* env, jclass clazz,
+    jlong llmPtr,
+    jstring jmessagesJson,
+    jstring jtoolsJson) {
+
+    if (llmPtr == 0) return 0;
+
+    Llm* llm = reinterpret_cast<Llm*>(llmPtr);
+    std::string messagesJson = jstringToString(env, jmessagesJson);
+    std::string toolsJson = jstringToString(env, jtoolsJson);
+
+    try {
+        std::string templated = applyStructuredChatTemplate(llm, messagesJson, toolsJson);
+        if (templated.empty()) {
+            return 0;
+        }
+        std::vector<int> tokens = llm->tokenizer_encode(templated);
+        return static_cast<jint>(tokens.size());
+    } catch (const std::exception& e) {
+        LOGE("Exception in countTokensWithStructuredMessages: %s", e.what());
+        return 0;
+    }
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_ai_assistance_mnn_MNNLlmNative_nativeDumpConfig(
+    JNIEnv* env, jclass clazz, jlong llmPtr) {
+
+    if (llmPtr == 0) return nullptr;
+
+    Llm* llm = reinterpret_cast<Llm*>(llmPtr);
+
+    try {
+        return stringToJstring(env, llm->dump_config());
+    } catch (const std::exception& e) {
+        LOGE("Exception in dumpConfig: %s", e.what());
+        return nullptr;
+    }
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_ai_assistance_mnn_MNNLlmNative_nativeGetContextInfo(
+    JNIEnv* env, jclass clazz, jlong llmPtr) {
+
+    if (llmPtr == 0) return nullptr;
+
+    Llm* llm = reinterpret_cast<Llm*>(llmPtr);
+
+    try {
+        const LlmContext* context = llm->getContext();
+        if (context == nullptr) {
+            return nullptr;
+        }
+        const std::string json = contextToJson(context);
+        if (json.empty()) {
+            return nullptr;
+        }
+        return stringToJstring(env, json);
+    } catch (const std::exception& e) {
+        LOGE("Exception in getContextInfo: %s", e.what());
+        return nullptr;
     }
 }
 
@@ -727,6 +1091,70 @@ Java_com_ai_assistance_mnn_MNNLlmNative_nativeSetConfig(
         return success ? JNI_TRUE : JNI_FALSE;
     } catch (const std::exception& e) {
         LOGE("Exception in set_config: %s", e.what());
+        return JNI_FALSE;
+    }
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_ai_assistance_mnn_MNNLlmNative_nativeSetAudioDataCallback(
+    JNIEnv* env, jclass clazz, jlong llmPtr, jobject callback) {
+
+    if (llmPtr == 0) return JNI_FALSE;
+
+    Llm* llm = reinterpret_cast<Llm*>(llmPtr);
+
+    clearAudioCallback(env, llmPtr);
+
+    if (callback == nullptr) {
+        llm->setWavformCallback(std::function<bool(const float*, size_t, bool)>());
+        return JNI_TRUE;
+    }
+
+    JavaVM* jvm = nullptr;
+    if (env->GetJavaVM(&jvm) != JNI_OK || jvm == nullptr) {
+        LOGE("Failed to get JavaVM for audio callback");
+        return JNI_FALSE;
+    }
+
+    jclass callbackClass = env->GetObjectClass(callback);
+    jmethodID onAudioDataMethod = env->GetMethodID(callbackClass, "onAudioData", "([FZ)Z");
+    env->DeleteLocalRef(callbackClass);
+    if (onAudioDataMethod == nullptr) {
+        LOGE("Failed to find onAudioData method in audio callback");
+        return JNI_FALSE;
+    }
+
+    jobject callbackGlobalRef = env->NewGlobalRef(callback);
+    if (callbackGlobalRef == nullptr) {
+        LOGE("Failed to create global reference for audio callback");
+        return JNI_FALSE;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(gAudioCallbackMutex);
+        gAudioCallbacks[llmPtr] = AudioCallbackHolder{jvm, callbackGlobalRef, onAudioDataMethod};
+    }
+
+    llm->setWavformCallback([llmPtr](const float* data, size_t size, bool isLastChunk) {
+        return invokeAudioCallback(llmPtr, data, size, isLastChunk);
+    });
+
+    return JNI_TRUE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_ai_assistance_mnn_MNNLlmNative_nativeGenerateWavform(
+    JNIEnv* env, jclass clazz, jlong llmPtr) {
+
+    if (llmPtr == 0) return JNI_FALSE;
+
+    Llm* llm = reinterpret_cast<Llm*>(llmPtr);
+
+    try {
+        llm->generateWavform();
+        return JNI_TRUE;
+    } catch (const std::exception& e) {
+        LOGE("Exception in generateWavform: %s", e.what());
         return JNI_FALSE;
     }
 }

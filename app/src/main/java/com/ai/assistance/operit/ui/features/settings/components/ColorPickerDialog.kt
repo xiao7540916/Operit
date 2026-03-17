@@ -107,6 +107,8 @@ fun ColorPickerDialog(
     cursorUserBubbleColorInput: Int,
     bubbleUserBubbleColorInput: Int,
     bubbleAiBubbleColorInput: Int,
+    bubbleUserTextColorInput: Int,
+    bubbleAiTextColorInput: Int,
     recentColors: List<Int>,
     onColorSelected:
             (
@@ -118,7 +120,9 @@ fun ColorPickerDialog(
                     pipIconColor: Int?,
                     cursorUserBubbleColor: Int?,
                     bubbleUserBubbleColor: Int?,
-                    bubbleAiBubbleColor: Int?
+                    bubbleAiBubbleColor: Int?,
+                    bubbleUserTextColor: Int?,
+                    bubbleAiTextColor: Int?
             ) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -135,6 +139,8 @@ fun ColorPickerDialog(
                 "cursorUserBubble" -> cursorUserBubbleColorInput
                 "bubbleUserBubble" -> bubbleUserBubbleColorInput
                 "bubbleAiBubble" -> bubbleAiBubbleColorInput
+                "bubbleUserText" -> bubbleUserTextColorInput
+                "bubbleAiText" -> bubbleAiTextColorInput
                 else -> primaryColorInput
             }
     val currentColor = Color(currentColorForPicker)
@@ -228,6 +234,10 @@ fun ColorPickerDialog(
                                     stringResource(R.string.colorpicker_select_bubble_user_bubble)
                                 "bubbleAiBubble" ->
                                     stringResource(R.string.colorpicker_select_bubble_ai_bubble)
+                                "bubbleUserText" ->
+                                    stringResource(R.string.colorpicker_select_bubble_user_text)
+                                "bubbleAiText" ->
+                                    stringResource(R.string.colorpicker_select_bubble_ai_text)
                                 else -> stringResource(R.string.colorpicker_select_color)
                             },
                     style = MaterialTheme.typography.titleMedium
@@ -577,18 +587,22 @@ fun ColorPickerDialog(
                 onClick = {
                     val newColor = pickedColor.toArgb()
                     when (currentColorPickerMode) {
-                        "primary" -> onColorSelected(newColor, null, null, null, null, null, null, null, null)
-                        "secondary" -> onColorSelected(null, newColor, null, null, null, null, null, null, null)
-                        "statusBar" -> onColorSelected(null, null, newColor, null, null, null, null, null, null)
-                        "appBar" -> onColorSelected(null, null, null, newColor, null, null, null, null, null)
-                        "historyIcon" -> onColorSelected(null, null, null, null, newColor, null, null, null, null)
-                        "pipIcon" -> onColorSelected(null, null, null, null, null, newColor, null, null, null)
+                        "primary" -> onColorSelected(newColor, null, null, null, null, null, null, null, null, null, null)
+                        "secondary" -> onColorSelected(null, newColor, null, null, null, null, null, null, null, null, null)
+                        "statusBar" -> onColorSelected(null, null, newColor, null, null, null, null, null, null, null, null)
+                        "appBar" -> onColorSelected(null, null, null, newColor, null, null, null, null, null, null, null)
+                        "historyIcon" -> onColorSelected(null, null, null, null, newColor, null, null, null, null, null, null)
+                        "pipIcon" -> onColorSelected(null, null, null, null, null, newColor, null, null, null, null, null)
                         "cursorUserBubble" ->
-                            onColorSelected(null, null, null, null, null, null, newColor, null, null)
+                            onColorSelected(null, null, null, null, null, null, newColor, null, null, null, null)
                         "bubbleUserBubble" ->
-                            onColorSelected(null, null, null, null, null, null, null, newColor, null)
+                            onColorSelected(null, null, null, null, null, null, null, newColor, null, null, null)
                         "bubbleAiBubble" ->
-                            onColorSelected(null, null, null, null, null, null, null, null, newColor)
+                            onColorSelected(null, null, null, null, null, null, null, null, newColor, null, null)
+                        "bubbleUserText" ->
+                            onColorSelected(null, null, null, null, null, null, null, null, null, newColor, null)
+                        "bubbleAiText" ->
+                            onColorSelected(null, null, null, null, null, null, null, null, null, null, newColor)
                     }
                     onDismiss()
                 },

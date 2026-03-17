@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +31,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ai.assistance.operit.R
@@ -850,14 +852,20 @@ class CustomXmlRenderer(
                     when (statusType) {
                         "completion", "complete" -> "✓ Task completed"
                         "wait_for_user_need" -> "✓ Ready for further assistance"
-                        "warning" ->
-                            if (statusContent.isNotBlank()) statusContent
-                            else "Warning: AI made a mistake"
                         else -> statusContent
                     }
 
                 Triple(statusType, statusContent, statusText)
             }
+
+        if (statusType == "warning") {
+            WarningStatusDisplay(
+                summaryText = stringResource(R.string.status_warning_ai_error_summary),
+                detailText = statusContent,
+                modifier = modifier
+            )
+            return
+        }
 
         // 非工具相关的状态信息
         val bgColor =
@@ -866,7 +874,6 @@ class CustomXmlRenderer(
                             MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
                     "wait_for_user_need" ->
                             MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
-                    "warning" -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
                     else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
                 }
 
@@ -874,7 +881,6 @@ class CustomXmlRenderer(
                 when (statusType) {
                     "completion", "complete" -> MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                     "wait_for_user_need" -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f)
-                    "warning" -> MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
                     else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                 }
 
@@ -891,11 +897,62 @@ class CustomXmlRenderer(
                             when (statusType) {
                                 "completion", "complete" -> MaterialTheme.colorScheme.primary
                                 "wait_for_user_need" -> MaterialTheme.colorScheme.tertiary
-                                "warning" -> MaterialTheme.colorScheme.error
                                 else -> textColor
                             },
                     modifier = Modifier.padding(12.dp),
-                    maxLines = if (statusType == "warning") 1 else Int.MAX_VALUE
+                    maxLines = Int.MAX_VALUE
+            )
+        }
+    }
+
+    @Composable
+    private fun WarningStatusDisplay(
+        summaryText: String,
+        detailText: String,
+        modifier: Modifier
+    ) {
+        val canOpenDetail = enableDialogs && detailText.isNotBlank()
+        var showDetailDialog by remember { mutableStateOf(false) }
+
+        if (showDetailDialog && canOpenDetail) {
+            ContentDetailDialog(
+                title = stringResource(R.string.status_warning_ai_error_detail_title),
+                content = detailText,
+                icon = Icons.Default.Error,
+                onDismiss = { showDetailDialog = false }
+            )
+        }
+
+        Row(
+            modifier =
+                modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = canOpenDetail) {
+                        showDetailDialog = true
+                    }
+                    .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .width(2.dp)
+                        .height(16.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                            shape = RoundedCornerShape(999.dp)
+                        )
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Text(
+                text = summaryText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error.copy(alpha = 0.9f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
         }
     }

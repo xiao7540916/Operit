@@ -1320,14 +1320,7 @@ class StandardSoftwareSettingsModifyTools(private val context: Context) {
         applyBoolean("enable_tool_call") { config, value -> config.copy(enableToolCall = value) }
         applyBoolean("strict_tool_call") { config, value -> config.copy(strictToolCall = value) }
 
-        if (updated.apiProviderType == ApiProviderType.MNN) {
-            if (updated.enableToolCall) {
-                updated = updated.copy(enableToolCall = false)
-            }
-            if (updated.strictToolCall) {
-                updated = updated.copy(strictToolCall = false)
-            }
-        } else if (!updated.enableToolCall && updated.strictToolCall) {
+        if (!updated.enableToolCall && updated.strictToolCall) {
             updated = updated.copy(strictToolCall = false)
         }
 

@@ -16,9 +16,11 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -41,6 +43,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -55,6 +58,8 @@ import com.ai.assistance.operit.ui.features.settings.components.ThemeModeOption
 import com.ai.assistance.operit.ui.features.chat.components.ChatStyle
 import com.ai.assistance.operit.ui.features.chat.components.style.bubble.BubbleImageBackgroundSurface
 import com.ai.assistance.operit.ui.features.chat.components.style.bubble.BubbleImageStyleConfig
+import com.ai.assistance.operit.ui.theme.applyFontFamilyToTypography
+import com.ai.assistance.operit.ui.theme.resolveConfiguredFontFamily
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -256,6 +261,26 @@ internal fun ThemeSettingsChatStyleSection(
     cursorUserBubbleColorInput: Int,
     bubbleUserBubbleColorInput: Int,
     bubbleAiBubbleColorInput: Int,
+    bubbleUserTextColorInput: Int,
+    bubbleAiTextColorInput: Int,
+    bubbleUserUseCustomFontInput: Boolean,
+    onBubbleUserUseCustomFontInputChange: (Boolean) -> Unit,
+    bubbleUserFontTypeInput: String,
+    onBubbleUserFontTypeInputChange: (String) -> Unit,
+    bubbleUserSystemFontNameInput: String,
+    onBubbleUserSystemFontNameInputChange: (String) -> Unit,
+    bubbleUserCustomFontPathInput: String?,
+    onBubbleUserCustomFontPathInputChange: (String?) -> Unit,
+    onPickBubbleUserFont: () -> Unit,
+    bubbleAiUseCustomFontInput: Boolean,
+    onBubbleAiUseCustomFontInputChange: (Boolean) -> Unit,
+    bubbleAiFontTypeInput: String,
+    onBubbleAiFontTypeInputChange: (String) -> Unit,
+    bubbleAiSystemFontNameInput: String,
+    onBubbleAiSystemFontNameInputChange: (String) -> Unit,
+    bubbleAiCustomFontPathInput: String?,
+    onBubbleAiCustomFontPathInputChange: (String?) -> Unit,
+    onPickBubbleAiFont: () -> Unit,
     previewUserAvatarUri: String?,
     previewAiAvatarUri: String?,
     onShowColorPicker: (String) -> Unit,
@@ -574,6 +599,39 @@ internal fun ThemeSettingsChatStyleSection(
                         null
                     }
                 }
+            val context = LocalContext.current
+            val previewUserFontFamily =
+                remember(
+                    context,
+                    bubbleUserUseCustomFontInput,
+                    bubbleUserFontTypeInput,
+                    bubbleUserSystemFontNameInput,
+                    bubbleUserCustomFontPathInput,
+                ) {
+                    resolveConfiguredFontFamily(
+                        context = context,
+                        useCustomFont = bubbleUserUseCustomFontInput,
+                        fontType = bubbleUserFontTypeInput,
+                        systemFontName = bubbleUserSystemFontNameInput,
+                        customFontPath = bubbleUserCustomFontPathInput,
+                    )
+                }
+            val previewAiFontFamily =
+                remember(
+                    context,
+                    bubbleAiUseCustomFontInput,
+                    bubbleAiFontTypeInput,
+                    bubbleAiSystemFontNameInput,
+                    bubbleAiCustomFontPathInput,
+                ) {
+                    resolveConfiguredFontFamily(
+                        context = context,
+                        useCustomFont = bubbleAiUseCustomFontInput,
+                        fontType = bubbleAiFontTypeInput,
+                        systemFontName = bubbleAiSystemFontNameInput,
+                        customFontPath = bubbleAiCustomFontPathInput,
+                    )
+                }
             if (chatStyleInput == UserPreferencesManager.CHAT_STYLE_BUBBLE) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
@@ -780,6 +838,102 @@ internal fun ThemeSettingsChatStyleSection(
                         onClick = { onShowColorPicker("bubbleAiBubble") },
                     )
                 }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                Text(
+                    text = stringResource(id = R.string.chat_style_bubble_text_style_title),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    ColorSelectionItem(
+                        title = stringResource(id = R.string.chat_style_bubble_user_text_color),
+                        color = Color(bubbleUserTextColorInput),
+                        modifier = Modifier.weight(1f),
+                        onClick = { onShowColorPicker("bubbleUserText") },
+                    )
+                    ColorSelectionItem(
+                        title = stringResource(id = R.string.chat_style_bubble_ai_text_color),
+                        color = Color(bubbleAiTextColorInput),
+                        modifier = Modifier.weight(1f),
+                        onClick = { onShowColorPicker("bubbleAiText") },
+                    )
+                }
+
+                BubbleFontStyleEditor(
+                    title = stringResource(id = R.string.chat_style_bubble_user_font_title),
+                    useCustomFont = bubbleUserUseCustomFontInput,
+                    onUseCustomFontChange = {
+                        onBubbleUserUseCustomFontInputChange(it)
+                        saveThemeSettingsWithCharacterCard {
+                            preferencesManager.saveThemeSettings(bubbleUserUseCustomFont = it)
+                        }
+                    },
+                    fontType = bubbleUserFontTypeInput,
+                    onFontTypeChange = {
+                        onBubbleUserFontTypeInputChange(it)
+                        saveThemeSettingsWithCharacterCard {
+                            preferencesManager.saveThemeSettings(bubbleUserFontType = it)
+                        }
+                    },
+                    systemFontName = bubbleUserSystemFontNameInput,
+                    onSystemFontNameChange = {
+                        onBubbleUserSystemFontNameInputChange(it)
+                        saveThemeSettingsWithCharacterCard {
+                            preferencesManager.saveThemeSettings(
+                                bubbleUserSystemFontName = it,
+                            )
+                        }
+                    },
+                    customFontPath = bubbleUserCustomFontPathInput,
+                    onPickFont = onPickBubbleUserFont,
+                    onClearFont = {
+                        onBubbleUserCustomFontPathInputChange(null)
+                        saveThemeSettingsWithCharacterCard {
+                            preferencesManager.saveThemeSettings(bubbleUserCustomFontPath = "")
+                        }
+                    },
+                )
+
+                BubbleFontStyleEditor(
+                    title = stringResource(id = R.string.chat_style_bubble_ai_font_title),
+                    useCustomFont = bubbleAiUseCustomFontInput,
+                    onUseCustomFontChange = {
+                        onBubbleAiUseCustomFontInputChange(it)
+                        saveThemeSettingsWithCharacterCard {
+                            preferencesManager.saveThemeSettings(bubbleAiUseCustomFont = it)
+                        }
+                    },
+                    fontType = bubbleAiFontTypeInput,
+                    onFontTypeChange = {
+                        onBubbleAiFontTypeInputChange(it)
+                        saveThemeSettingsWithCharacterCard {
+                            preferencesManager.saveThemeSettings(bubbleAiFontType = it)
+                        }
+                    },
+                    systemFontName = bubbleAiSystemFontNameInput,
+                    onSystemFontNameChange = {
+                        onBubbleAiSystemFontNameInputChange(it)
+                        saveThemeSettingsWithCharacterCard {
+                            preferencesManager.saveThemeSettings(
+                                bubbleAiSystemFontName = it,
+                            )
+                        }
+                    },
+                    customFontPath = bubbleAiCustomFontPathInput,
+                    onPickFont = onPickBubbleAiFont,
+                    onClearFont = {
+                        onBubbleAiCustomFontPathInputChange(null)
+                        saveThemeSettingsWithCharacterCard {
+                            preferencesManager.saveThemeSettings(bubbleAiCustomFontPath = "")
+                        }
+                    },
+                )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
@@ -1083,6 +1237,10 @@ internal fun ThemeSettingsChatStyleSection(
                     } else {
                         MaterialTheme.colorScheme.surface
                     },
+                userTextColor = Color(bubbleUserTextColorInput),
+                aiTextColor = Color(bubbleAiTextColorInput),
+                userFontFamily = previewUserFontFamily,
+                aiFontFamily = previewAiFontFamily,
                 userImageStyle = if (previewChatStyle == ChatStyle.BUBBLE) previewUserImageStyle else null,
                 aiImageStyle = if (previewChatStyle == ChatStyle.BUBBLE) previewAiImageStyle else null,
                 bubbleShowAvatar = bubbleShowAvatarInput,
@@ -1096,6 +1254,140 @@ internal fun ThemeSettingsChatStyleSection(
                 userAvatarUri = previewUserAvatarUri,
                 aiAvatarUri = previewAiAvatarUri,
             )
+        }
+    }
+}
+
+@Composable
+private fun BubbleFontStyleEditor(
+    title: String,
+    useCustomFont: Boolean,
+    onUseCustomFontChange: (Boolean) -> Unit,
+    fontType: String,
+    onFontTypeChange: (String) -> Unit,
+    systemFontName: String,
+    onSystemFontNameChange: (String) -> Unit,
+    customFontPath: String?,
+    onPickFont: () -> Unit,
+    onClearFont: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            ),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = title, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = stringResource(id = R.string.use_system_or_custom_font),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = useCustomFont, onCheckedChange = onUseCustomFontChange)
+            }
+
+            if (useCustomFont) {
+                Text(
+                    text = stringResource(id = R.string.font_type_label),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = fontType == UserPreferencesManager.FONT_TYPE_SYSTEM,
+                        onClick = {
+                            onFontTypeChange(UserPreferencesManager.FONT_TYPE_SYSTEM)
+                        },
+                        label = { Text(stringResource(id = R.string.system_font)) },
+                    )
+                    FilterChip(
+                        selected = fontType == UserPreferencesManager.FONT_TYPE_FILE,
+                        onClick = {
+                            onFontTypeChange(UserPreferencesManager.FONT_TYPE_FILE)
+                        },
+                        label = { Text(stringResource(id = R.string.custom_font_file)) },
+                    )
+                }
+
+                when (fontType) {
+                    UserPreferencesManager.FONT_TYPE_SYSTEM -> {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            listOf(
+                                UserPreferencesManager.SYSTEM_FONT_DEFAULT to
+                                    stringResource(id = R.string.theme_font_default),
+                                UserPreferencesManager.SYSTEM_FONT_SERIF to
+                                    stringResource(id = R.string.theme_font_serif),
+                                UserPreferencesManager.SYSTEM_FONT_SANS_SERIF to
+                                    stringResource(id = R.string.theme_font_sans_serif),
+                                UserPreferencesManager.SYSTEM_FONT_MONOSPACE to
+                                    stringResource(id = R.string.theme_font_monospace),
+                                UserPreferencesManager.SYSTEM_FONT_CURSIVE to
+                                    stringResource(id = R.string.theme_font_cursive),
+                            ).forEach { (fontName, label) ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    RadioButton(
+                                        selected = systemFontName == fontName,
+                                        onClick = { onSystemFontNameChange(fontName) },
+                                    )
+                                    Text(text = label, style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                        }
+                    }
+
+                    UserPreferencesManager.FONT_TYPE_FILE -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            OutlinedButton(
+                                onClick = onPickFont,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(stringResource(id = R.string.select_font_file))
+                            }
+                            OutlinedButton(
+                                onClick = onClearFont,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(stringResource(id = R.string.clear_font))
+                            }
+                        }
+
+                        if (!customFontPath.isNullOrBlank()) {
+                            Text(
+                                text =
+                                    stringResource(
+                                        id = R.string.current_font_file_path,
+                                        customFontPath.substringAfterLast("/"),
+                                    ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1600,6 +1892,10 @@ private fun ChatStylePreviewCard(
     chatStyle: ChatStyle,
     userColor: Color,
     aiColor: Color,
+    userTextColor: Color,
+    aiTextColor: Color,
+    userFontFamily: FontFamily?,
+    aiFontFamily: FontFamily?,
     userImageStyle: BubbleImageStyleConfig?,
     aiImageStyle: BubbleImageStyleConfig?,
     bubbleShowAvatar: Boolean,
@@ -1617,6 +1913,15 @@ private fun ChatStylePreviewCard(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
     ) {
+        val baseTypography = MaterialTheme.typography
+        val userTypography =
+            remember(userFontFamily, baseTypography) {
+                applyFontFamilyToTypography(baseTypography, userFontFamily)
+            }
+        val aiTypography =
+            remember(aiFontFamily, baseTypography) {
+                applyFontFamilyToTypography(baseTypography, aiFontFamily)
+            }
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
                 text = stringResource(id = R.string.chat_style_preview_title),
@@ -1669,251 +1974,260 @@ private fun ChatStylePreviewCard(
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (bubbleWideLayoutEnabled) {
-                        if (bubbleShowAvatar) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = stringResource(id = R.string.chat_style_preview_user_name),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = previewNameColor,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                PreviewChatAvatar(
-                                    avatarUri = userAvatarUri,
-                                    contentDescription = stringResource(id = R.string.user_avatar_label),
-                                )
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                        ) {
-                            if (userImageStyle != null) {
-                                BubbleImageBackgroundSurface(
-                                    imageStyle = userImageStyle,
-                                    shape = userBubbleShape,
-                                    modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
-                                    contentPadding =
-                                        PaddingValues(
-                                            start = bubbleUserContentPaddingLeft.dp,
-                                            top = 12.dp,
-                                            end = bubbleUserContentPaddingRight.dp,
-                                            bottom = 12.dp,
-                                        ),
+                        MaterialTheme(typography = userTypography) {
+                            if (bubbleShowAvatar) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End,
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
-                                        text = stringResource(id = R.string.chat_style_preview_user_message),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                }
-                            } else {
-                                Surface(
-                                    shape = userBubbleShape,
-                                    color = userColor,
-                                    modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
-                                    tonalElevation = 1.dp,
-                                ) {
-                                    Text(
-                                        text = stringResource(id = R.string.chat_style_preview_user_message),
-                                        modifier =
-                                            Modifier.padding(
-                                                start = bubbleUserContentPaddingLeft.dp,
-                                                top = 12.dp,
-                                                end = bubbleUserContentPaddingRight.dp,
-                                                bottom = 12.dp,
-                                            ),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    )
-                                }
-                            }
-                        }
-
-                        if (bubbleShowAvatar) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                PreviewChatAvatar(
-                                    avatarUri = aiAvatarUri,
-                                    contentDescription = stringResource(id = R.string.ai_avatar_label),
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(
-                                        text = stringResource(id = R.string.chat_style_preview_ai_name),
+                                        text = stringResource(id = R.string.chat_style_preview_user_name),
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.SemiBold,
                                         color = previewNameColor,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
-                                    Text(
-                                        text = stringResource(id = R.string.chat_style_preview_ai_meta),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    PreviewChatAvatar(
+                                        avatarUri = userAvatarUri,
+                                        contentDescription = stringResource(id = R.string.user_avatar_label),
                                     )
                                 }
                             }
-                        }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Start,
-                        ) {
-                            if (aiImageStyle != null) {
-                                BubbleImageBackgroundSurface(
-                                    imageStyle = aiImageStyle,
-                                    shape = aiBubbleShape,
-                                    modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
-                                    contentPadding =
-                                        PaddingValues(
-                                            start = bubbleAiContentPaddingLeft.dp,
-                                            top = 12.dp,
-                                            end = bubbleAiContentPaddingRight.dp,
-                                            bottom = 12.dp,
-                                        ),
-                                ) {
-                                    Text(
-                                        text = stringResource(id = R.string.chat_style_preview_ai_message),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                }
-                            } else {
-                                Surface(
-                                    shape = aiBubbleShape,
-                                    color = aiColor,
-                                    modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
-                                    tonalElevation = 1.dp,
-                                ) {
-                                    Text(
-                                        text = stringResource(id = R.string.chat_style_preview_ai_message),
-                                        modifier =
-                                            Modifier.padding(
-                                                start = bubbleAiContentPaddingLeft.dp,
-                                                top = 12.dp,
-                                                end = bubbleAiContentPaddingRight.dp,
-                                                bottom = 12.dp,
-                                            ),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.Bottom,
-                        ) {
-                            if (userImageStyle != null) {
-                                BubbleImageBackgroundSurface(
-                                    imageStyle = userImageStyle,
-                                    shape = userBubbleShape,
-                                    modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
-                                    contentPadding =
-                                        PaddingValues(
-                                            start = bubbleUserContentPaddingLeft.dp,
-                                            top = 12.dp,
-                                            end = bubbleUserContentPaddingRight.dp,
-                                            bottom = 12.dp,
-                                        ),
-                                ) {
-                                    Text(
-                                        text = stringResource(id = R.string.chat_style_preview_user_message),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                }
-                            } else {
-                                Surface(
-                                    shape = userBubbleShape,
-                                    color = userColor,
-                                    modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
-                                    tonalElevation = 1.dp,
-                                ) {
-                                    Text(
-                                        text = stringResource(id = R.string.chat_style_preview_user_message),
-                                        modifier =
-                                            Modifier.padding(
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                if (userImageStyle != null) {
+                                    BubbleImageBackgroundSurface(
+                                        imageStyle = userImageStyle,
+                                        shape = userBubbleShape,
+                                        modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
+                                        contentPadding =
+                                            PaddingValues(
                                                 start = bubbleUserContentPaddingLeft.dp,
                                                 top = 12.dp,
                                                 end = bubbleUserContentPaddingRight.dp,
                                                 bottom = 12.dp,
                                             ),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    )
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.chat_style_preview_user_message),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = userTextColor,
+                                        )
+                                    }
+                                } else {
+                                    Surface(
+                                        shape = userBubbleShape,
+                                        color = userColor,
+                                        modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
+                                        tonalElevation = 1.dp,
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.chat_style_preview_user_message),
+                                            modifier =
+                                                Modifier.padding(
+                                                    start = bubbleUserContentPaddingLeft.dp,
+                                                    top = 12.dp,
+                                                    end = bubbleUserContentPaddingRight.dp,
+                                                    bottom = 12.dp,
+                                                ),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = userTextColor,
+                                        )
+                                    }
                                 }
-                            }
-                            if (bubbleShowAvatar) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                PreviewChatAvatar(
-                                    avatarUri = userAvatarUri,
-                                    contentDescription = stringResource(id = R.string.user_avatar_label),
-                                )
                             }
                         }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Start,
-                            verticalAlignment = Alignment.Bottom,
-                        ) {
+
+                        MaterialTheme(typography = aiTypography) {
                             if (bubbleShowAvatar) {
-                                PreviewChatAvatar(
-                                    avatarUri = aiAvatarUri,
-                                    contentDescription = stringResource(id = R.string.ai_avatar_label),
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                            }
-                            if (aiImageStyle != null) {
-                                BubbleImageBackgroundSurface(
-                                    imageStyle = aiImageStyle,
-                                    shape = aiBubbleShape,
-                                    modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
-                                    contentPadding =
-                                        PaddingValues(
-                                            start = bubbleAiContentPaddingLeft.dp,
-                                            top = 12.dp,
-                                            end = bubbleAiContentPaddingRight.dp,
-                                            bottom = 12.dp,
-                                        ),
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Text(
-                                        text = stringResource(id = R.string.chat_style_preview_ai_message),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface,
+                                    PreviewChatAvatar(
+                                        avatarUri = aiAvatarUri,
+                                        contentDescription = stringResource(id = R.string.ai_avatar_label),
                                     )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = stringResource(id = R.string.chat_style_preview_ai_name),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = previewNameColor,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = stringResource(id = R.string.chat_style_preview_ai_meta),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                                        )
+                                    }
                                 }
-                            } else {
-                                Surface(
-                                    shape = aiBubbleShape,
-                                    color = aiColor,
-                                    modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
-                                    tonalElevation = 1.dp,
-                                ) {
-                                    Text(
-                                        text = stringResource(id = R.string.chat_style_preview_ai_message),
-                                        modifier =
-                                            Modifier.padding(
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Start,
+                            ) {
+                                if (aiImageStyle != null) {
+                                    BubbleImageBackgroundSurface(
+                                        imageStyle = aiImageStyle,
+                                        shape = aiBubbleShape,
+                                        modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
+                                        contentPadding =
+                                            PaddingValues(
                                                 start = bubbleAiContentPaddingLeft.dp,
                                                 top = 12.dp,
                                                 end = bubbleAiContentPaddingRight.dp,
                                                 bottom = 12.dp,
                                             ),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface,
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.chat_style_preview_ai_message),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = aiTextColor,
+                                        )
+                                    }
+                                } else {
+                                    Surface(
+                                        shape = aiBubbleShape,
+                                        color = aiColor,
+                                        modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
+                                        tonalElevation = 1.dp,
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.chat_style_preview_ai_message),
+                                            modifier =
+                                                Modifier.padding(
+                                                    start = bubbleAiContentPaddingLeft.dp,
+                                                    top = 12.dp,
+                                                    end = bubbleAiContentPaddingRight.dp,
+                                                    bottom = 12.dp,
+                                                ),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = aiTextColor,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        MaterialTheme(typography = userTypography) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.Bottom,
+                            ) {
+                                if (userImageStyle != null) {
+                                    BubbleImageBackgroundSurface(
+                                        imageStyle = userImageStyle,
+                                        shape = userBubbleShape,
+                                        modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
+                                        contentPadding =
+                                            PaddingValues(
+                                                start = bubbleUserContentPaddingLeft.dp,
+                                                top = 12.dp,
+                                                end = bubbleUserContentPaddingRight.dp,
+                                                bottom = 12.dp,
+                                            ),
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.chat_style_preview_user_message),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = userTextColor,
+                                        )
+                                    }
+                                } else {
+                                    Surface(
+                                        shape = userBubbleShape,
+                                        color = userColor,
+                                        modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
+                                        tonalElevation = 1.dp,
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.chat_style_preview_user_message),
+                                            modifier =
+                                                Modifier.padding(
+                                                    start = bubbleUserContentPaddingLeft.dp,
+                                                    top = 12.dp,
+                                                    end = bubbleUserContentPaddingRight.dp,
+                                                    bottom = 12.dp,
+                                                ),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = userTextColor,
+                                        )
+                                    }
+                                }
+                                if (bubbleShowAvatar) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    PreviewChatAvatar(
+                                        avatarUri = userAvatarUri,
+                                        contentDescription = stringResource(id = R.string.user_avatar_label),
                                     )
+                                }
+                            }
+                        }
+
+                        MaterialTheme(typography = aiTypography) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Start,
+                                verticalAlignment = Alignment.Bottom,
+                            ) {
+                                if (bubbleShowAvatar) {
+                                    PreviewChatAvatar(
+                                        avatarUri = aiAvatarUri,
+                                        contentDescription = stringResource(id = R.string.ai_avatar_label),
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+                                if (aiImageStyle != null) {
+                                    BubbleImageBackgroundSurface(
+                                        imageStyle = aiImageStyle,
+                                        shape = aiBubbleShape,
+                                        modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
+                                        contentPadding =
+                                            PaddingValues(
+                                                start = bubbleAiContentPaddingLeft.dp,
+                                                top = 12.dp,
+                                                end = bubbleAiContentPaddingRight.dp,
+                                                bottom = 12.dp,
+                                            ),
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.chat_style_preview_ai_message),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = aiTextColor,
+                                        )
+                                    }
+                                } else {
+                                    Surface(
+                                        shape = aiBubbleShape,
+                                        color = aiColor,
+                                        modifier = Modifier.widthIn(max = bubblePreviewMaxWidth).defaultMinSize(minHeight = 44.dp),
+                                        tonalElevation = 1.dp,
+                                    ) {
+                                        Text(
+                                            text = stringResource(id = R.string.chat_style_preview_ai_message),
+                                            modifier =
+                                                Modifier.padding(
+                                                    start = bubbleAiContentPaddingLeft.dp,
+                                                    top = 12.dp,
+                                                    end = bubbleAiContentPaddingRight.dp,
+                                                    bottom = 12.dp,
+                                                ),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = aiTextColor,
+                                        )
+                                    }
                                 }
                             }
                         }
