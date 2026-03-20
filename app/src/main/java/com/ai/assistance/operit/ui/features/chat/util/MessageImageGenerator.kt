@@ -170,7 +170,7 @@ object MessageImageGenerator {
                                         Spacer(modifier = Modifier.width(2.dp))
                                         // 品牌名称
                                         Text(
-                                            text = "Operit AI",
+                                            text = "Rivotek AI",
                                             fontSize = 16.sp, // 减少字体大小：18sp -> 16sp
                                             fontWeight = FontWeight.Bold,
                                             color = colorScheme.onSurface

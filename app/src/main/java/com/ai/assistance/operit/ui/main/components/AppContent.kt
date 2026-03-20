@@ -196,9 +196,7 @@ fun AppContent(
         LocalAppBarContentColor provides appBarContentColor,
     ) {
         // 使用Scaffold来正确处理顶部栏和内容的布局
-        // contentWindowInsets = WindowInsets(0) 让内容可以延伸到系统栏下方，使背景能够完全填充
         Scaffold(
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 // 单一工具栏 - 使用小型化的设计
                 // 使用 windowInsets 参数让 TopAppBar 自己处理状态栏的 insets

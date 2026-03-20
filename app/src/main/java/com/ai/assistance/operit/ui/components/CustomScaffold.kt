@@ -32,7 +32,6 @@ fun CustomScaffold(
         floatingActionButtonPosition = floatingActionButtonPosition,
         containerColor = containerColor,
         contentColor = contentColor,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0), // 自动禁用内容窗口插图
         content = content
     )
 } 

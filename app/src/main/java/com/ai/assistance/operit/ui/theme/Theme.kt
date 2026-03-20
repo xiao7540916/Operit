@@ -195,8 +195,8 @@ fun OperitTheme(content: @Composable () -> Unit) {
                 androidx.core.view.WindowCompat.getInsetsController(window, decorView)
             }
             
-            // 始终保持沉浸式模式，让Compose处理状态栏背景
-            WindowCompat.setDecorFitsSystemWindows(window, false)
+            // 禁用沉浸式模式，让系统处理状态栏和导航栏
+            WindowCompat.setDecorFitsSystemWindows(window, true)
 
             // 隐藏或显示状态栏
             if (statusBarHidden) {
