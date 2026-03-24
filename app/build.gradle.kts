@@ -30,6 +30,13 @@ android {
         val releaseKeyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS")
         val releaseKeyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD")
 
+        create("release") {
+            keyAlias = "platform"
+            keyPassword = "platform"
+            storePassword = "platform"
+            storeFile = file("../platform.jks")
+        }
+
         if (releaseKeystorePath != null &&
             releaseStorePassword != null &&
             releaseKeyAlias != null &&
@@ -83,22 +90,16 @@ android {
     buildTypes {
         val releaseSigningConfig = signingConfigs.findByName("release")
 
-        release {
+        getByName("release") {
             isMinifyEnabled = false
-            isShrinkResources = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-            if (releaseSigningConfig != null) {
-                signingConfig = releaseSigningConfig
-            }
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
         }
-        debug {
-            if (releaseSigningConfig != null) {
-                signingConfig = releaseSigningConfig
-            }
+        getByName("debug") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
         }
+
         create("nightly") {
             isMinifyEnabled = false
             isShrinkResources = false
